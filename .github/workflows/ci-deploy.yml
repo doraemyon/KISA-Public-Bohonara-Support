@@ -1,0 +1,82 @@
+name: Verify and deploy bot
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: public-kisa-bot-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run checks
+        run: npm run check
+
+  deploy:
+    if: ${{ github.event_name != 'pull_request' && vars.CLOUDFLARE_DEPLOY_ENABLED == 'true' }}
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: cloudflare
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Render deployment configuration
+        env:
+          CLOUDFLARE_D1_DATABASE_ID: ${{ vars.CLOUDFLARE_D1_DATABASE_ID }}
+          CLOUDFLARE_D1_DATABASE_NAME: ${{ vars.CLOUDFLARE_D1_DATABASE_NAME }}
+          BOT_USERNAME: ${{ vars.BOT_USERNAME }}
+          NOTICE_PAGES_BASE_URL: ${{ vars.NOTICE_PAGES_BASE_URL }}
+          MAX_SUBSCRIBERS: ${{ vars.MAX_SUBSCRIBERS }}
+          BROADCAST_BATCH_SIZE: ${{ vars.BROADCAST_BATCH_SIZE }}
+          ENABLE_CRON: ${{ vars.ENABLE_CRON }}
+        run: npm run render-config
+
+      - name: Apply D1 migrations
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npm run migrate:remote
+
+      - name: Deploy Cloudflare Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npm run deploy
+
+      - name: Setup reminder
+        run: |
+          echo "### Cloudflare deployment completed" >> "$GITHUB_STEP_SUMMARY"
+          echo "Add the three Worker secrets in the Cloudflare dashboard, configure the Telegram webhook, and only then set ENABLE_CRON=true." >> "$GITHUB_STEP_SUMMARY"

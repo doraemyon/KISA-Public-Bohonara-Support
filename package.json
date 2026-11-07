@@ -1,0 +1,26 @@
+{
+  "name": "kisa-public-bohonara-support",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck && npm test",
+    "render-config": "node scripts/render-wrangler-config.mjs",
+    "deploy": "wrangler deploy --config .wrangler/deploy.jsonc",
+    "migrate:remote": "wrangler d1 migrations apply DB --remote --config .wrangler/deploy.jsonc"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "fast-xml-parser": "^5.12.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261107.1",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0",
+    "wrangler": "^4.158.0"
+  }
+}
