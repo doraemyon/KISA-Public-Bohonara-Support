@@ -1,6 +1,6 @@
 {
   "name": "kisa-public-bohonara-support",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,6 +8,7 @@
     "typecheck": "tsc --noEmit",
     "check": "npm run typecheck && npm test",
     "render-config": "node scripts/render-wrangler-config.mjs",
+    "setup:telegram": "node scripts/setup-telegram.mjs",
     "deploy": "wrangler deploy --config .wrangler/deploy.jsonc",
     "migrate:remote": "wrangler d1 migrations apply DB --remote --config .wrangler/deploy.jsonc"
   },
@@ -15,7 +16,8 @@
     "node": ">=22"
   },
   "dependencies": {
-    "fast-xml-parser": "^5.12.0"
+    "fast-xml-parser": "^5.12.0",
+    "uqr": "^0.1.3"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20261107.1",

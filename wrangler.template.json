@@ -2,7 +2,7 @@
   "$schema": "../node_modules/wrangler/config-schema.json",
   "name": "kisa-public-bohonara-support",
   "main": "../src/index.ts",
-  "compatibility_date": "2026-11-07",
+  "compatibility_date": "2026-11-10",
   "triggers": {
     "crons": ["* * * * *"]
   },
@@ -11,7 +11,10 @@
     "KISA_RSS_URL": "https://www.boho.or.kr/kr/rss.do?bbsId=B0000133",
     "NOTICE_PAGES_BASE_URL": "__NOTICE_PAGES_BASE_URL__",
     "MAX_SUBSCRIBERS": "__MAX_SUBSCRIBERS__",
-    "BROADCAST_BATCH_SIZE": "__BROADCAST_BATCH_SIZE__"
+    "BROADCAST_BATCH_SIZE": "__BROADCAST_BATCH_SIZE__",
+    "MAX_PENDING_APPLICATIONS": "__MAX_PENDING_APPLICATIONS__",
+    "MAX_APPLICATIONS_PER_HOUR": "__MAX_APPLICATIONS_PER_HOUR__",
+    "ADMIN_NOTIFICATION_BATCH_SIZE": "__ADMIN_NOTIFICATION_BATCH_SIZE__"
   },
   "d1_databases": [
     {

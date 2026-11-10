@@ -32,3 +32,17 @@ export function broadcastBatchSize(env: Env): number {
   // stays comfortably under Telegram's free limit and Workers subrequest cap.
   return boundedInteger(env.BROADCAST_BATCH_SIZE, 20, 1, 20);
 }
+
+export function maxPendingApplications(env: Env): number {
+  return boundedInteger(env.MAX_PENDING_APPLICATIONS, 100, 1, 500);
+}
+
+export function maxApplicationsPerHour(env: Env): number {
+  return boundedInteger(env.MAX_APPLICATIONS_PER_HOUR, 20, 1, 60);
+}
+
+export function adminNotificationBatchSize(env: Env): number {
+  // Notice delivery is capped at 20. Five application notifications keep the
+  // scheduled burst below Telegram's approximate 30 messages/second ceiling.
+  return boundedInteger(env.ADMIN_NOTIFICATION_BATCH_SIZE, 5, 1, 5);
+}

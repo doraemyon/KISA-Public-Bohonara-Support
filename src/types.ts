@@ -8,6 +8,9 @@ export interface Env {
   NOTICE_PAGES_BASE_URL: string;
   MAX_SUBSCRIBERS: string;
   BROADCAST_BATCH_SIZE: string;
+  MAX_PENDING_APPLICATIONS: string;
+  MAX_APPLICATIONS_PER_HOUR: string;
+  ADMIN_NOTIFICATION_BATCH_SIZE: string;
 }
 
 export interface TelegramChat {
@@ -18,6 +21,9 @@ export interface TelegramChat {
 export interface TelegramUser {
   id: number;
   is_bot?: boolean;
+  first_name?: string;
+  last_name?: string;
+  username?: string;
 }
 
 export interface TelegramMessage {
@@ -30,6 +36,14 @@ export interface TelegramMessage {
 export interface TelegramUpdate {
   update_id: number;
   message?: TelegramMessage;
+  callback_query?: TelegramCallbackQuery;
+}
+
+export interface TelegramCallbackQuery {
+  id: string;
+  from: TelegramUser;
+  message?: TelegramMessage;
+  data?: string;
 }
 
 export interface Notice {
@@ -48,4 +62,18 @@ export interface PendingDelivery {
   published_at: string;
 }
 
-export type InlineKeyboard = Array<Array<{ text: string; url: string }>>;
+export interface PendingApplication {
+  chat_id: string;
+  display_name: string;
+  username: string | null;
+  requested_at: string;
+  notify_attempts: number;
+}
+
+export interface InlineKeyboardButton {
+  text: string;
+  url?: string;
+  callback_data?: string;
+}
+
+export type InlineKeyboard = InlineKeyboardButton[][];

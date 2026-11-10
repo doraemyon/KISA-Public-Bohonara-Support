@@ -4,7 +4,17 @@ import {
   randomInviteCode,
   sha256,
 } from "./access";
+import {
+  applicationDecisionLabel,
+  decideApplication,
+  handleApplicationCallback,
+  pendingApplicationCount,
+  processPendingApplicationNotifications,
+  reopenApplication,
+  submitApplication,
+} from "./applications";
 import { broadcastBatchSize, maxSubscribers, required } from "./config";
+import { renderOnboardingPage } from "./onboarding";
 import { noticeIdFromLink, parseKisaRss } from "./rss";
 import {
   isPermanentRecipientError,
@@ -19,7 +29,7 @@ import type {
   TelegramUpdate,
 } from "./types";
 
-const VERSION = "0.1.0";
+const VERSION = "0.2.0";
 const MAX_RSS_BYTES = 2_000_000;
 const DEFAULT_RSS_URL = "https://www.boho.or.kr/kr/rss.do?bbsId=B0000133";
 
@@ -29,6 +39,20 @@ function jsonResponse(body: unknown, status = 200): Response {
     headers: {
       "Content-Type": "application/json; charset=utf-8",
       "Cache-Control": "no-store",
+    },
+  });
+}
+
+function htmlResponse(body: string): Response {
+  return new Response(body, {
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "public, max-age=300",
+      "Content-Security-Policy":
+        "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+      "Referrer-Policy": "no-referrer",
+      "X-Content-Type-Options": "nosniff",
+      "X-Frame-Options": "DENY",
     },
   });
 }
@@ -159,6 +183,48 @@ async function handleAdminCommand(
     );
     return true;
   }
+  if (name === "applications") {
+    await sendTelegramMessage(
+      env,
+      chatId,
+      `승인 대기 신청: ${await pendingApplicationCount(env)}건`,
+    );
+    return true;
+  }
+  if (name === "approve" || name === "reject") {
+    const target = args[0] ?? "";
+    if (!/^\d{1,20}$/.test(target)) {
+      await sendTelegramMessage(env, chatId, `사용법: /${name} TELEGRAM_CHAT_ID`);
+      return true;
+    }
+    const decision = await decideApplication(
+      env,
+      target,
+      name === "approve" ? "approve" : "reject",
+    );
+    await sendTelegramMessage(
+      env,
+      chatId,
+      `Chat ID ${target}: ${applicationDecisionLabel(decision)}`,
+    );
+    return true;
+  }
+  if (name === "reopen") {
+    const target = args[0] ?? "";
+    if (!/^\d{1,20}$/.test(target)) {
+      await sendTelegramMessage(env, chatId, "사용법: /reopen TELEGRAM_CHAT_ID");
+      return true;
+    }
+    const reopened = await reopenApplication(env, target);
+    await sendTelegramMessage(
+      env,
+      chatId,
+      reopened
+        ? `${target} 사용자가 다시 신청할 수 있습니다.`
+        : "삭제할 신청 기록이 없거나 현재 구독 중입니다.",
+    );
+    return true;
+  }
   if (name === "revoke") {
     const target = args[0] ?? "";
     if (!/^\d{1,20}$/.test(target)) {
@@ -168,6 +234,16 @@ async function handleAdminCommand(
     const result = await env.DB.prepare("DELETE FROM subscribers WHERE chat_id = ?1")
       .bind(target)
       .run();
+    if ((result.meta.changes ?? 0) > 0) {
+      await env.DB.prepare(
+        `UPDATE applications
+         SET status = 'rejected', decided_at = ?1, decided_by = ?2,
+             display_name = '', username = NULL
+         WHERE chat_id = ?3`,
+      )
+        .bind(new Date().toISOString(), chatId, target)
+        .run();
+    }
     await sendTelegramMessage(
       env,
       chatId,
@@ -191,16 +267,20 @@ async function handleCommand(env: Env, message: TelegramMessage): Promise<void> 
 
   if (command.name === "start") {
     const code = command.args[0];
-    if (!code) return;
+    if (!code || code.toLowerCase() === "apply") {
+      await submitApplication(env, message);
+      return;
+    }
     await subscribeWithCode(env, chatId, code);
     return;
   }
 
   if (command.name === "stop") {
     if (!(await subscriberExists(env, chatId))) return;
-    const result = await env.DB.prepare("DELETE FROM subscribers WHERE chat_id = ?1")
-      .bind(chatId)
-      .run();
+    const [result] = await env.DB.batch([
+      env.DB.prepare("DELETE FROM subscribers WHERE chat_id = ?1").bind(chatId),
+      env.DB.prepare("DELETE FROM applications WHERE chat_id = ?1").bind(chatId),
+    ]);
     await sendTelegramMessage(
       env,
       chatId,
@@ -223,7 +303,7 @@ async function handleCommand(env: Env, message: TelegramMessage): Promise<void> 
       await sendTelegramMessage(
         env,
         chatId,
-        "사용 가능한 명령어\n/status - 구독 상태 확인\n/stop - 구독 해제",
+        "사용 가능한 명령어\n/status - 구독 상태 확인\n/stop - 구독 해제 및 신청 정보 삭제",
       );
     }
   }
@@ -241,7 +321,11 @@ async function handleWebhook(request: Request, env: Env): Promise<Response> {
 
   try {
     const update = (await request.json()) as TelegramUpdate;
-    if (update.message) await handleCommand(env, update.message);
+    if (update.callback_query) {
+      await handleApplicationCallback(env, update.callback_query);
+    } else if (update.message) {
+      await handleCommand(env, update.message);
+    }
   } catch (error) {
     // Return 200 to avoid Telegram replaying a command that may already have
     // changed subscription state. The user can safely retry the command.
@@ -252,7 +336,7 @@ async function handleWebhook(request: Request, env: Env): Promise<Response> {
 
 async function fetchCurrentNotices(env: Env): Promise<Notice[]> {
   const response = await fetch(env.KISA_RSS_URL?.trim() || DEFAULT_RSS_URL, {
-    headers: { "User-Agent": "kisa-team-bot/0.1 (+Cloudflare Workers)" },
+    headers: { "User-Agent": "kisa-team-bot/0.2 (+Cloudflare Workers)" },
   });
   if (!response.ok) throw new Error(`KISA RSS returned HTTP ${response.status}.`);
   const xml = await response.text();
@@ -405,6 +489,9 @@ async function cleanupExpiredData(env: Env): Promise<void> {
     env.DB.prepare(
       "DELETE FROM deliveries WHERE status IN ('sent', 'skipped') AND sent_at < ?1",
     ).bind(thirtyDaysAgo),
+    env.DB.prepare(
+      "DELETE FROM applications WHERE status = 'pending' AND requested_at < ?1",
+    ).bind(thirtyDaysAgo),
   ]);
 }
 
@@ -416,6 +503,7 @@ async function runScheduled(env: Env): Promise<void> {
   } catch (error) {
     console.error("KISA RSS synchronization failed", error);
   }
+  await processPendingApplicationNotifications(env);
   await processPendingDeliveries(env);
   await cleanupExpiredData(env);
 }
@@ -423,6 +511,9 @@ async function runScheduled(env: Env): Promise<void> {
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
+    if (request.method === "GET" && url.pathname === "/") {
+      return htmlResponse(renderOnboardingPage(env));
+    }
     if (request.method === "GET" && url.pathname === "/healthz") {
       return jsonResponse({ ok: true, version: VERSION });
     }

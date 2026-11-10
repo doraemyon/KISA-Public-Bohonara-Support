@@ -10,6 +10,9 @@ function required(name) {
 function bounded(name, fallback, minimum, maximum) {
   const raw = process.env[name]?.trim();
   if (!raw) return String(fallback);
+  if (!/^\d+$/.test(raw)) {
+    throw new Error(`${name} must be an integer.`);
+  }
   const value = Number.parseInt(raw, 10);
   if (!Number.isSafeInteger(value) || value < minimum || value > maximum) {
     throw new Error(`${name} must be between ${minimum} and ${maximum}.`);
@@ -42,6 +45,24 @@ template.vars.BOT_USERNAME = botUsername;
 template.vars.NOTICE_PAGES_BASE_URL = noticePagesBaseUrl.replace(/\/$/, "");
 template.vars.MAX_SUBSCRIBERS = bounded("MAX_SUBSCRIBERS", 50, 1, 500);
 template.vars.BROADCAST_BATCH_SIZE = bounded("BROADCAST_BATCH_SIZE", 20, 1, 20);
+template.vars.MAX_PENDING_APPLICATIONS = bounded(
+  "MAX_PENDING_APPLICATIONS",
+  100,
+  1,
+  500,
+);
+template.vars.MAX_APPLICATIONS_PER_HOUR = bounded(
+  "MAX_APPLICATIONS_PER_HOUR",
+  20,
+  1,
+  60,
+);
+template.vars.ADMIN_NOTIFICATION_BATCH_SIZE = bounded(
+  "ADMIN_NOTIFICATION_BATCH_SIZE",
+  5,
+  1,
+  5,
+);
 template.d1_databases[0].database_name =
   process.env.CLOUDFLARE_D1_DATABASE_NAME?.trim() || "kisa-public-bohonara-support";
 template.d1_databases[0].database_id = databaseId;
