@@ -1,10 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
+import * as applications from "../src/applications";
 import {
   applicationDecisionLabel,
   parseApplicationCallback,
   parseSolutionAccount,
 } from "../src/applications";
+import worker from "../src/index";
+import type { Env } from "../src/types";
 
 describe("application approval helpers", () => {
   it("accepts only bounded approval callback data", () => {
@@ -39,5 +42,51 @@ describe("application approval helpers", () => {
       expect(parseSolutionAccount(args, "zz")).toBeNull();
     }
     expect(() => parseSolutionAccount(["zz_01234"], "")).toThrow("APPLICATION_ACCOUNT_PREFIX");
+  });
+});
+
+describe("Telegram application messages", () => {
+  it("queues a valid Korean command and silently discards invalid application messages", async () => {
+    const env = {
+      BOT_USERNAME: "KisaNoticeBot",
+      TELEGRAM_WEBHOOK_SECRET: "test-webhook",
+      ADMIN_TELEGRAM_USER_ID: "100",
+      APPLICATION_ACCOUNT_PREFIX: "zz",
+    } as Env;
+    const submit = vi.spyOn(applications, "submitApplication").mockResolvedValue(true);
+    const instructions = vi.spyOn(applications, "sendApplicationInstructions").mockResolvedValue();
+    const send = (text: string) =>
+      worker.fetch(
+        new Request("https://example.test/telegram/webhook", {
+          method: "POST",
+          headers: { "X-Telegram-Bot-Api-Secret-Token": "test-webhook" },
+          body: JSON.stringify({
+            message: {
+              message_id: 1,
+              text,
+              from: { id: 200 },
+              chat: { id: 200, type: "private" },
+            },
+          }),
+        }),
+        env,
+      );
+
+    try {
+      for (const text of ["/알림 신청 zz_01234", "/알림신청 aa_01234", "/알림신청 zz_1234"]) {
+        expect((await send(text)).status).toBe(200);
+      }
+      expect(submit).not.toHaveBeenCalled();
+      expect(instructions).not.toHaveBeenCalled();
+
+      expect((await send("/알림신청 zz_01234")).status).toBe(200);
+      expect((await send("/apply zz_01234")).status).toBe(200);
+      expect(submit).toHaveBeenCalledTimes(2);
+      expect(submit).toHaveBeenCalledWith(env, expect.any(Object), "zz_01234");
+      expect(instructions).not.toHaveBeenCalled();
+    } finally {
+      submit.mockRestore();
+      instructions.mockRestore();
+    }
   });
 });

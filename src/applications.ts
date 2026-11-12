@@ -1,3 +1,4 @@
+import { APPLICATION_COMMAND } from "./access";
 import {
   adminNotificationBatchSize,
   maxApplicationsPerHour,
@@ -83,7 +84,7 @@ export async function sendApplicationInstructions(env: Env, chatId: string): Pro
     env,
     chatId,
     "가입 자격 확인을 위해 사내 솔루션 계정명을 입력해 주세요.\n\n" +
-      "입력 방법: /apply 뒤에 공백을 한 칸 넣고 실제 계정명을 입력합니다.\n" +
+      `입력 방법: /${APPLICATION_COMMAND} 뒤에 공백을 한 칸 넣고 실제 계정명을 입력합니다.\n` +
       "계정 형식: 영문 2자_숫자 5자리\n" +
       "비밀번호나 인증코드는 보내지 마세요. 신청은 관리자 확인 후 승인됩니다.",
   );

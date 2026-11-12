@@ -1,4 +1,5 @@
 import {
+  APPLICATION_COMMAND,
   parseCommand,
   parseInviteRequest,
   randomInviteCode,
@@ -277,12 +278,10 @@ async function handleCommand(env: Env, message: TelegramMessage): Promise<void> 
     return;
   }
 
-  if (command.name === "apply") {
+  if (command.name === APPLICATION_COMMAND || command.name === "apply") {
     const account = parseSolutionAccount(command.args, env.APPLICATION_ACCOUNT_PREFIX);
     if (account) {
       await submitApplication(env, message, account);
-    } else {
-      await sendApplicationInstructions(env, chatId);
     }
     return;
   }

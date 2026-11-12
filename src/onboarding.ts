@@ -1,5 +1,6 @@
 import { renderSVG } from "uqr";
 
+import { APPLICATION_COMMAND } from "./access";
 import { required } from "./config";
 import type { Env } from "./types";
 
@@ -89,7 +90,7 @@ export function renderOnboardingPage(env: Env): string {
         <p class="lead">보호나라에 새 보안공지가 등록되면 Telegram 개인 메시지로 전달합니다. 가입 신청 후 관리자 승인이 완료되면 별도 설정 없이 알림이 시작됩니다.</p>
         <ol class="steps">
           <li class="step"><span class="step__number">1</span><div><strong>Telegram 봇 열기</strong><span>휴대폰으로 QR을 촬영하거나 오른쪽 버튼을 누릅니다.</span></div></li>
-          <li class="step"><span class="step__number">2</span><div><strong>사내 솔루션 계정명 입력</strong><span>가입 자격 확인을 위해 Telegram에서 시작 버튼을 누른 뒤 <code>/apply 계정명</code>을 보내 주세요. 계정 형식은 영문 2자_숫자 5자리입니다. 비밀번호나 인증코드는 보내지 마세요.</span></div></li>
+          <li class="step"><span class="step__number">2</span><div><strong>사내 솔루션 계정명 입력</strong><span>가입 자격 확인을 위해 Telegram에서 시작 버튼을 누른 뒤 <code>/${APPLICATION_COMMAND} 계정명</code>을 보내 주세요. 계정 형식은 영문 2자_숫자 5자리입니다. 비밀번호나 인증코드는 보내지 마세요.</span></div></li>
           <li class="step"><span class="step__number">3</span><div><strong>관리자 승인 기다리기</strong><span>승인 완료 메시지가 도착한 뒤부터 새 공지를 받아볼 수 있습니다.</span></div></li>
         </ol>
       </section>

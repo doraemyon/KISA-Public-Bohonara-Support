@@ -1,3 +1,5 @@
+export const APPLICATION_COMMAND = "알림신청";
+
 export interface ParsedCommand {
   name: string;
   args: string[];
