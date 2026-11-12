@@ -64,4 +64,26 @@ describe("public notice archive", () => {
     expect(await serveNoticePage(new URL("/notices/72298/metadata.json", publicSite), env)).toBeNull();
     expect(fetchArchive).toHaveBeenCalledTimes(1);
   });
+
+  it("distinguishes a complete publication, a missing download, and an upstream outage", async () => {
+    let downloadStatus = 200;
+    vi.stubGlobal("fetch", vi.fn((url: URL) => {
+      if (url.pathname.endsWith("/metadata.json")) return Response.json({ notice_id: "72298" });
+      const download = url.pathname.endsWith(".txt");
+      const status = url.pathname.endsWith("/en/notice.txt") ? downloadStatus : 200;
+      return new Response(null, {
+        status, headers: { "Content-Type": download ? "text/plain" : "text/html" },
+      });
+    }));
+    const url = new URL("/notices/72298/status.json", publicSite);
+    for (const [upstream, expectedStatus, state] of [
+      [200, 200, "ready"], [404, 404, "pending"], [503, 503, "unavailable"],
+    ] as const) {
+      downloadStatus = upstream;
+      const response = await serveNoticePage(url, env);
+      expect(response?.status).toBe(expectedStatus);
+      expect(await response?.json()).toEqual({ state });
+      expect(response?.headers.get("Cache-Control")).toBe("no-store");
+    }
+  });
 });

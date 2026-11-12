@@ -6,6 +6,7 @@ import type { Env, InlineKeyboard } from "./types";
 type Language = "ko" | "en";
 
 const DOCUMENT_PATH = /^\/notices\/(\d{1,20})\/(ko|en)\/(notice\.txt)?$/;
+const PUBLICATION_PATH = /^\/notices\/(\d{1,20})\/status\.json$/;
 const STYLE_PATH = "/assets/style.css";
 const COPY_PATH = "/assets/app.js";
 const STATUS_PATH = "/assets/notice-status.js";
@@ -17,27 +18,29 @@ const retry = document.getElementById("retry-button");
 const status = document.getElementById("check-status");
 const english = document.documentElement.lang === "en";
 let timer;
+let delay = 5000;
 async function check() {
   if (retry.disabled) return;
   clearTimeout(timer);
   retry.disabled = true;
   status.textContent = english ? "Checking publication status…" : "게시 상태를 확인하고 있습니다…";
   try {
-    const url = new URL(window.location.href);
-    url.searchParams.set("check", String(Date.now()));
-    const response = await fetch(url, { cache: "no-store" });
+    const response = await fetch(new URL("../status.json", window.location.href), { cache: "no-store" });
     if (response.ok) {
+      const url = new URL(window.location.href);
       url.searchParams.delete("check");
       url.searchParams.set("published", String(Date.now()));
       window.location.replace(url);
       return;
     }
+    if (response.status === 503) throw new Error("Archive temporarily unavailable.");
     status.textContent = english ? "This page checks again automatically." : "아직 준비 중입니다. 잠시 후 자동으로 확인합니다.";
   } catch {
     status.textContent = english ? "Could not check the page. Retrying shortly." : "확인하지 못했습니다. 잠시 후 다시 시도합니다.";
   } finally {
     retry.disabled = false;
-    timer = setTimeout(check, 5000);
+    timer = setTimeout(check, delay);
+    delay = Math.min(delay * 2, 60000);
   }
 }
 retry.addEventListener("click", check);
@@ -196,19 +199,42 @@ async function archiveFetch(base: URL, path: string, version: string, method = "
   return fetch(target, { method, redirect: "manual", signal: AbortSignal.timeout(8000) });
 }
 
-async function pairIsPublished(base: URL, id: string, language: Language, version: string): Promise<boolean> {
-  const peer = language === "ko" ? "en" : "ko";
-  const [metadata, counterpart] = await Promise.all([
+async function publicationStatus(
+  base: URL, id: string, version: string, requestedPath?: string,
+): Promise<200 | 404 | 503> {
+  const files = ["ko/", "ko/notice.txt", "en/", "en/notice.txt"]
+    .map(file => ({ path: `/notices/${id}/${file}`, type: file.endsWith(".txt") ? "text/plain" : "text/html" }))
+    .filter(file => file.path !== requestedPath);
+  const [metadata, ...documents] = await Promise.all([
     archiveFetch(base, `/notices/${id}/metadata.json`, version),
-    archiveFetch(base, `/notices/${id}/${peer}/`, version, "HEAD"),
+    ...files.map(file => archiveFetch(base, file.path, version, "HEAD")),
   ]);
-  if (!metadata.ok || !counterpart.ok) {
+  const responses = [metadata, ...documents];
+  if (responses.some(response => !response.ok && response.status !== 404)) {
     await metadata.body?.cancel();
-    return false;
+    return 503;
+  }
+  if (responses.some(response => response.status === 404)) {
+    await metadata.body?.cancel();
+    return 404;
+  }
+  if (documents.some((response, index) =>
+    response.headers.get("Content-Type")?.split(";")[0].toLowerCase() !== files[index].type,
+  )) {
+    await metadata.body?.cancel();
+    return 503;
   }
   const record = await metadata.json<{ notice_id?: string; translation_status?: string }>();
   // Older published pairs predate the explicit translation_status field.
-  return record.notice_id === id && (record.translation_status ?? "complete") === "complete";
+  if (record.notice_id !== id) return 503;
+  return (record.translation_status ?? "complete") === "complete" ? 200 : 404;
+}
+
+function publicationResponse(status: 200 | 404 | 503): Response {
+  const state = status === 200 ? "ready" : status === 404 ? "pending" : "unavailable";
+  return new Response(JSON.stringify({ state }), {
+    status, headers: archiveHeaders("application/json"),
+  });
 }
 
 export async function serveNoticePage(url: URL, env: Env): Promise<Response | null> {
@@ -226,9 +252,10 @@ export async function serveNoticePage(url: URL, env: Env): Promise<Response | nu
     return new Response(NOTICE_STATUS_SCRIPT, { headers: archiveHeaders("text/javascript", "public, max-age=300") });
   }
   const document = DOCUMENT_PATH.exec(path);
+  const statusId = PUBLICATION_PATH.exec(path)?.[1];
   const index = path === "/notices/";
   const asset = path === STYLE_PATH || path === COPY_PATH;
-  if (!document && !index && !asset) return null;
+  if (!document && !statusId && !index && !asset) return null;
 
   const id = document?.[1];
   const language = document?.[2] as Language | undefined;
@@ -239,21 +266,27 @@ export async function serveNoticePage(url: URL, env: Env): Promise<Response | nu
     : new Response(status === 404 ? "문서를 찾을 수 없습니다." : "공지 문서를 확인하는 중입니다. 잠시 후 다시 시도해 주세요.", {
         status, headers: archiveHeaders("text/plain"),
       });
-  if (!base || base.origin === url.origin) return unavailable(503);
+  if (!base || base.origin === url.origin) {
+    return statusId ? publicationResponse(503) : unavailable(503);
+  }
   base.pathname = base.pathname.replace(/\/*$/, "/");
 
   const upstreamPath = index ? "/" : path;
-  const checking = url.searchParams.has("check") || url.searchParams.has("published");
+  const checking = Boolean(statusId) || url.searchParams.has("check") || url.searchParams.has("published");
   const version = checking ? String(Math.floor(Date.now() / 5000)) : "";
   try {
+    if (statusId) return publicationResponse(await publicationStatus(base, statusId, version));
     const response = await archiveFetch(base, upstreamPath, version);
     if (!response.ok) {
       await response.body?.cancel();
       return unavailable(response.status === 404 ? 404 : 503);
     }
-    if (id && language && !(await pairIsPublished(base, id, language, version))) {
-      await response.body?.cancel();
-      return unavailable(404);
+    if (id) {
+      const status = await publicationStatus(base, id, version, path);
+      if (status !== 200) {
+        await response.body?.cancel();
+        return unavailable(status);
+      }
     }
     const type = text ? "text/plain" : path === STYLE_PATH ? "text/css" : path === COPY_PATH ? "text/javascript" : "text/html";
     const upstreamType = response.headers.get("Content-Type")?.split(";")[0].toLowerCase();
@@ -268,6 +301,6 @@ export async function serveNoticePage(url: URL, env: Env): Promise<Response | nu
       ? mirrorHtml(result, new URL(upstreamPath.slice(1), base), base, language)
       : result;
   } catch {
-    return unavailable(503);
+    return statusId ? publicationResponse(503) : unavailable(503);
   }
 }
