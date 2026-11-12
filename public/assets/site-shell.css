@@ -20,7 +20,7 @@ body {
   background: #010409;
 }
 
-.topbar__inner,
+.topbar__inner:not(.site-header__inner),
 main.public-content {
   width: min(100% - 40px, 840px);
   margin: 0 auto;
@@ -67,7 +67,7 @@ main.public-content {
 }
 
 @media (max-width: 480px) {
-  .topbar__inner,
+  .topbar__inner:not(.site-header__inner),
   main.public-content {
     width: calc(100% - 24px);
   }

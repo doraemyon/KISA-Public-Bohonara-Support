@@ -110,7 +110,12 @@ function mirrorHtml(response: Response, source: URL, base: URL, language?: Langu
     .on("meta[http-equiv]", { element(element) { element.remove(); } })
     .on("head", { element(element) { element.append(SITE_SHELL_STYLESHEET, { html: true }); } })
     .on("header.site-header", {
-      element(element) { element.replace(renderSiteHeader(archiveLabel(language), "/notice"), { html: true }); },
+      element(element) {
+        element.replace(
+          renderSiteHeader(archiveLabel(language), "/notice", { alignWithArchive: !language }),
+          { html: true },
+        );
+      },
     })
     .on("main.page-shell", {
       element(element) {
