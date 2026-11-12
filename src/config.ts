@@ -2,6 +2,24 @@ import type { Env } from "./types";
 
 export const NOTICE_ICON_PATH = "/assets/notice-icon.png";
 
+export function httpsUrl(value: string | undefined): URL | null {
+  try {
+    const url = new URL(value?.trim() ?? "");
+    if (url.protocol === "https:" && !url.username && !url.password && !url.search && !url.hash) {
+      return url;
+    }
+  } catch {
+    // Invalid configuration is handled by the caller.
+  }
+  return null;
+}
+
+export function publicSiteUrl(env: Env): URL | null {
+  const url = httpsUrl(env.PUBLIC_BASE_URL);
+  if (url?.pathname === "/" && !url.hostname.endsWith(".github.io")) return url;
+  return null;
+}
+
 export function required(value: string | undefined, name: string): string {
   const normalized = value?.trim() ?? "";
   if (!normalized) {

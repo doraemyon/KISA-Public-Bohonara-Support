@@ -16,7 +16,7 @@ import {
   sendApplicationInstructions,
   submitApplication,
 } from "./applications";
-import { broadcastBatchSize, maxSubscribers, required } from "./config";
+import { broadcastBatchSize, maxSubscribers, publicSiteUrl, required } from "./config";
 import { noticeKeyboard, serveNoticePage } from "./notice-pages";
 import { renderOnboardingPage } from "./onboarding";
 import { parseKisaRss } from "./rss";
@@ -517,6 +517,19 @@ export default {
       return handleWebhook(request, env);
     }
     if (request.method === "GET") {
+      if (url.pathname === "/robots.txt" || url.pathname === "/sitemap.xml") {
+        const site = publicSiteUrl(env);
+        if (!site) return jsonResponse({ ok: false, error: "public site URL unavailable" }, 503);
+        if (url.pathname === "/robots.txt") {
+          return new Response(`User-agent: *\nAllow: /\nSitemap: ${site.origin}/sitemap.xml\n`, {
+            headers: { "Content-Type": "text/plain; charset=utf-8" },
+          });
+        }
+        return new Response(
+          `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>${site.href}</loc></url>\n</urlset>\n`,
+          { headers: { "Content-Type": "application/xml; charset=utf-8" } },
+        );
+      }
       const noticePage = await serveNoticePage(url, env);
       if (noticePage) return noticePage;
     }

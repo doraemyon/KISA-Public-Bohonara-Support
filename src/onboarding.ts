@@ -1,5 +1,5 @@
 import { APPLICATION_COMMAND } from "./access";
-import { NOTICE_ICON_PATH, required } from "./config";
+import { NOTICE_ICON_PATH, publicSiteUrl, required } from "./config";
 import { renderSiteHeader, SITE_SHELL_STYLESHEET } from "./site-header";
 import { renderTelegramQr } from "./telegram-qr";
 import type { Env } from "./types";
@@ -27,6 +27,7 @@ export function renderOnboardingPage(env: Env): string {
   const qr = renderTelegramQr(botLink);
   const safeBotLink = escapeHtml(botLink);
   const safeBotUsername = escapeHtml(botUsername);
+  const canonical = publicSiteUrl(env);
 
   return `<!doctype html>
 <html lang="ko">
@@ -34,8 +35,9 @@ export function renderOnboardingPage(env: Env): string {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="index,follow">
-  <meta name="description" content="KISA 보호나라 보안공지를 Telegram으로 전하는 독립적인 비공식 알리미">
-  <title>보호나라 보안공지 알림 봇 구독</title>
+  <meta name="description" content="KISA 보호나라 보안공지의 텔레그램 알림을 신청하세요. 새 공지와 국문·영문 문서를 안내하는 비공식 서비스입니다.">
+  <title>비공식 KISA 보호나라 보안공지 | 텔레그램 알림 신청</title>
+  ${canonical ? `<link rel="canonical" href="${escapeHtml(canonical.href)}">` : ""}
   <link rel="icon" type="image/png" href="${NOTICE_ICON_PATH}">
   ${SITE_SHELL_STYLESHEET}
   <style>
@@ -76,9 +78,9 @@ export function renderOnboardingPage(env: Env): string {
   ${renderSiteHeader("보안공지 알리미", "/", { showArchiveLink: true })}
   <main class="public-content">
     <header class="intro">
-      <p class="eyebrow">비공식 Telegram 알림 봇 서비스</p>
+      <p class="eyebrow">비공식 KISA 보호나라 보안공지</p>
       <h1>보호나라 보안공지를 놓치지 마세요.</h1>
-      <p class="lead">보호나라에 새 보안공지가 등록되면 Telegram 개인 메시지로 전달합니다.<br>가입 신청 후 관리자 승인이 완료되면 별도 설정 없이 알림이 시작됩니다.</p>
+      <p class="lead">KISA(키사) 보호나라에 새 보안공지가 등록되면 텔레그램 개인 메시지로 전달합니다.<br>가입 신청 후 관리자 승인이 완료되면 별도 설정 없이 알림이 시작됩니다.</p>
     </header>
     <div class="layout">
       <section class="signup-steps" aria-labelledby="signup-steps-title">

@@ -1,4 +1,4 @@
-import { NOTICE_ICON_PATH } from "./config";
+import { httpsUrl, NOTICE_ICON_PATH, publicSiteUrl } from "./config";
 import { noticeIdFromLink } from "./rss";
 import { renderSiteHeader, SITE_SHELL_STYLESHEET } from "./site-header";
 import type { Env, InlineKeyboard } from "./types";
@@ -47,22 +47,10 @@ retry.addEventListener("click", check);
 timer = setTimeout(check, 1200);
 `;
 
-function httpsUrl(value: string | undefined): URL | null {
-  try {
-    const url = new URL(value?.trim() ?? "");
-    if (url.protocol === "https:" && !url.username && !url.password && !url.search && !url.hash) {
-      return url;
-    }
-  } catch {
-    // Invalid configuration is handled by the caller.
-  }
-  return null;
-}
-
 export function noticeKeyboard(env: Env, sourceLink: string): InlineKeyboard {
   const keyboard: InlineKeyboard = [[{ text: "공지 열기", url: sourceLink }]];
-  const base = httpsUrl(env.PUBLIC_BASE_URL);
-  if (!base || base.pathname !== "/" || base.hostname.endsWith(".github.io")) return keyboard;
+  const base = publicSiteUrl(env);
+  if (!base) return keyboard;
   try {
     const id = noticeIdFromLink(sourceLink);
     keyboard.push([

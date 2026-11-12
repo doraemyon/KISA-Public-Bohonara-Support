@@ -2,6 +2,8 @@
 
 KISA 보호나라 보안공지를 Telegram 개인 메시지로 전달하는 소규모 승인형 알림 서비스입니다. 공개 가입 페이지의 QR로 봇을 열고 본인의 성명을 제출하면 관리자가 가입 신청을 검토합니다. Telegram bot token과 관리자 ID는 Cloudflare Worker Secret으로 관리합니다. 신청·구독 데이터는 공개 저장소에 넣지 않습니다.
 
+[비공식 KISA 보호나라 보안공지 텔레그램 알림 신청](https://notice.bohonara.workers.dev/)
+
 ## 주요 기능
 
 - 반응형 가입 안내 페이지와 Telegram QR
