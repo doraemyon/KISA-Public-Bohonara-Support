@@ -30,19 +30,22 @@ if (!/^[A-Za-z0-9_]{5,32}$/.test(botUsername)) {
   throw new Error("BOT_USERNAME is not a valid Telegram bot username.");
 }
 
-const noticePagesBaseUrl =
-  process.env.NOTICE_PAGES_BASE_URL?.trim() ||
-  "https://doraemyon.github.io/KISA-Bohonara-Support";
-const parsedPagesUrl = new URL(noticePagesBaseUrl);
-if (parsedPagesUrl.protocol !== "https:" || parsedPagesUrl.search || parsedPagesUrl.hash) {
-  throw new Error("NOTICE_PAGES_BASE_URL must be a plain HTTPS URL.");
+const publicBaseUrl = new URL(
+  process.env.PUBLIC_BASE_URL?.trim() || "https://kisa.kisa-public-bohonara-support.workers.dev",
+);
+if (
+  publicBaseUrl.protocol !== "https:" || publicBaseUrl.username || publicBaseUrl.password ||
+  publicBaseUrl.pathname !== "/" || publicBaseUrl.search || publicBaseUrl.hash ||
+  publicBaseUrl.hostname.endsWith(".github.io")
+) {
+  throw new Error("PUBLIC_BASE_URL must be the HTTPS origin of the public Worker.");
 }
 
 const template = JSON.parse(
   await readFile(new URL("../wrangler.template.json", import.meta.url), "utf8"),
 );
 template.vars.BOT_USERNAME = botUsername;
-template.vars.NOTICE_PAGES_BASE_URL = noticePagesBaseUrl.replace(/\/$/, "");
+template.vars.PUBLIC_BASE_URL = publicBaseUrl.origin;
 template.vars.MAX_SUBSCRIBERS = bounded("MAX_SUBSCRIBERS", 50, 1, 500);
 template.vars.BROADCAST_BATCH_SIZE = bounded("BROADCAST_BATCH_SIZE", 20, 1, 20);
 template.vars.MAX_PENDING_APPLICATIONS = bounded(

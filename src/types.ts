@@ -3,10 +3,10 @@ export interface Env {
   TELEGRAM_BOT_TOKEN: string;
   TELEGRAM_WEBHOOK_SECRET: string;
   ADMIN_TELEGRAM_USER_ID: string;
-  APPLICATION_ACCOUNT_PREFIX: string;
   BOT_USERNAME: string;
   KISA_RSS_URL: string;
-  NOTICE_PAGES_BASE_URL: string;
+  NOTICE_ARCHIVE_ORIGIN: string;
+  PUBLIC_BASE_URL: string;
   MAX_SUBSCRIBERS: string;
   BROADCAST_BATCH_SIZE: string;
   MAX_PENDING_APPLICATIONS: string;
@@ -67,7 +67,8 @@ export interface PendingApplication {
   chat_id: string;
   display_name: string;
   username: string | null;
-  solution_account: string;
+  applicant_name: string | null;
+  solution_account: string | null;
   requested_at: string;
   notify_attempts: number;
 }

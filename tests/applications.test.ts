@@ -4,7 +4,7 @@ import * as applications from "../src/applications";
 import {
   applicationDecisionLabel,
   parseApplicationCallback,
-  parseSolutionAccount,
+  parseApplicantName,
 } from "../src/applications";
 import worker from "../src/index";
 import type { Env } from "../src/types";
@@ -29,19 +29,20 @@ describe("application approval helpers", () => {
     expect(applicationDecisionLabel("full")).toBe("구독 인원 초과");
   });
 
-  it("requires exactly one account with the configured prefix and five ASCII digits", () => {
-    expect(parseSolutionAccount(["ZZ_01234"], "zz")).toBe("zz_01234");
+  it("accepts Korean and international names while rejecting the old account format", () => {
+    expect(parseApplicantName(["이예원"])).toBe("이예원");
+    expect(parseApplicantName(["Marie-Claire", "O’Connor"])).toBe("Marie-Claire O’Connor");
+    expect(parseApplicantName(["Jose\u0301"])).toBe("José");
     for (const args of [
       [],
+      ["이"],
       ["aa_01234"],
-      ["zz_1234"],
-      ["zz_123456"],
-      ["zz_１２３４５"],
-      ["zz_01234", "unexpected"],
+      ["홍길동", "123"],
+      ["https://example.test"],
+      ["이".repeat(49)],
     ]) {
-      expect(parseSolutionAccount(args, "zz")).toBeNull();
+      expect(parseApplicantName(args)).toBeNull();
     }
-    expect(() => parseSolutionAccount(["zz_01234"], "")).toThrow("APPLICATION_ACCOUNT_PREFIX");
   });
 });
 
@@ -51,7 +52,6 @@ describe("Telegram application messages", () => {
       BOT_USERNAME: "KisaNoticeBot",
       TELEGRAM_WEBHOOK_SECRET: "test-webhook",
       ADMIN_TELEGRAM_USER_ID: "100",
-      APPLICATION_ACCOUNT_PREFIX: "zz",
     } as Env;
     const submit = vi.spyOn(applications, "submitApplication").mockResolvedValue(true);
     const instructions = vi.spyOn(applications, "sendApplicationInstructions").mockResolvedValue();
@@ -73,16 +73,16 @@ describe("Telegram application messages", () => {
       );
 
     try {
-      for (const text of ["/알림 신청 zz_01234", "/알림신청 aa_01234", "/알림신청 zz_1234"]) {
+      for (const text of ["/알림 신청 이예원", "/알림신청 aa_01234", "/알림신청 1234"]) {
         expect((await send(text)).status).toBe(200);
       }
       expect(submit).not.toHaveBeenCalled();
       expect(instructions).not.toHaveBeenCalled();
 
-      expect((await send("/알림신청 zz_01234")).status).toBe(200);
-      expect((await send("/apply zz_01234")).status).toBe(200);
+      expect((await send("/알림신청 이예원")).status).toBe(200);
+      expect((await send("/apply 이예원")).status).toBe(200);
       expect(submit).toHaveBeenCalledTimes(2);
-      expect(submit).toHaveBeenCalledWith(env, expect.any(Object), "zz_01234");
+      expect(submit).toHaveBeenCalledWith(env, expect.any(Object), "이예원");
       expect(instructions).not.toHaveBeenCalled();
     } finally {
       submit.mockRestore();

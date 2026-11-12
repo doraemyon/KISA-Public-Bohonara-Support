@@ -25,15 +25,12 @@ describe("onboarding page", () => {
     );
   });
 
-  it("explains how to submit an account without exposing its configured prefix", () => {
-    const html = renderOnboardingPage({
-      ...environment("KisaNoticeBot"),
-      APPLICATION_ACCOUNT_PREFIX: "xyz-private-test",
-    });
+  it("explains name-based signup and links to the local notice archive", () => {
+    const html = renderOnboardingPage(environment("KisaNoticeBot"));
 
-    expect(html).toContain('<code class="step__command">/알림신청 계정명</code>');
-    expect(html).toContain("<strong>본인의 사내 솔루션 계정명</strong>");
-    expect(html).toContain("영문 2자_숫자 5자리");
-    expect(html).not.toContain("xyz-private-test");
+    expect(html).toContain('<code class="step__command">/알림신청 성명</code>');
+    expect(html).toContain("<strong>/알림신청 이예원</strong>");
+    expect(html).toContain('href="/notices/"');
+    expect(html).not.toMatch(/github\.com|github\.io|계정명/);
   });
 });

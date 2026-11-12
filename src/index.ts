@@ -9,7 +9,7 @@ import {
   applicationDecisionLabel,
   decideApplication,
   handleApplicationCallback,
-  parseSolutionAccount,
+  parseApplicantName,
   pendingApplicationCount,
   processPendingApplicationNotifications,
   reopenApplication,
@@ -17,15 +17,15 @@ import {
   submitApplication,
 } from "./applications";
 import { broadcastBatchSize, maxSubscribers, required } from "./config";
+import { noticeKeyboard, serveNoticePage } from "./notice-pages";
 import { renderOnboardingPage } from "./onboarding";
-import { noticeIdFromLink, parseKisaRss } from "./rss";
+import { parseKisaRss } from "./rss";
 import {
   isPermanentRecipientError,
   sendTelegramMessage,
 } from "./telegram";
 import type {
   Env,
-  InlineKeyboard,
   Notice,
   PendingDelivery,
   TelegramMessage,
@@ -241,7 +241,7 @@ async function handleAdminCommand(
       await env.DB.prepare(
         `UPDATE applications
          SET status = 'rejected', decided_at = ?1, decided_by = ?2,
-             display_name = '', username = NULL, solution_account = NULL
+             display_name = '', username = NULL, applicant_name = NULL, solution_account = NULL
          WHERE chat_id = ?3`,
       )
         .bind(new Date().toISOString(), chatId, target)
@@ -279,9 +279,9 @@ async function handleCommand(env: Env, message: TelegramMessage): Promise<void> 
   }
 
   if (command.name === APPLICATION_COMMAND || command.name === "apply") {
-    const account = parseSolutionAccount(command.args, env.APPLICATION_ACCOUNT_PREFIX);
-    if (account) {
-      await submitApplication(env, message, account);
+    const applicantName = parseApplicantName(command.args);
+    if (applicantName) {
+      await submitApplication(env, message, applicantName);
     }
     return;
   }
@@ -405,24 +405,6 @@ async function seedOrQueueNotices(env: Env, notices: Notice[]): Promise<void> {
   }
 }
 
-function noticeKeyboard(env: Env, link: string): InlineKeyboard {
-  const keyboard: InlineKeyboard = [[{ text: "공지 열기", url: link }]];
-  const baseUrl = env.NOTICE_PAGES_BASE_URL?.trim().replace(/\/$/, "");
-  if (!baseUrl) return keyboard;
-  try {
-    const parsed = new URL(baseUrl);
-    if (parsed.protocol !== "https:") return keyboard;
-    const noticeId = noticeIdFromLink(link);
-    keyboard.push([
-      { text: "국문 공지", url: `${baseUrl}/notices/${noticeId}/ko/` },
-      { text: "영문 공지", url: `${baseUrl}/notices/${noticeId}/en/` },
-    ]);
-  } catch {
-    return keyboard;
-  }
-  return keyboard;
-}
-
 async function deliverOne(env: Env, delivery: PendingDelivery): Promise<void> {
   const publishedLine = delivery.published_at
     ? `\n게시: ${delivery.published_at}`
@@ -533,6 +515,10 @@ export default {
     }
     if (request.method === "POST" && url.pathname === "/telegram/webhook") {
       return handleWebhook(request, env);
+    }
+    if (request.method === "GET") {
+      const noticePage = await serveNoticePage(url, env);
+      if (noticePage) return noticePage;
     }
     return jsonResponse({ ok: false, error: "not found" }, 404);
   },

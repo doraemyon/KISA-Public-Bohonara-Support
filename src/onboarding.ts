@@ -44,8 +44,8 @@ export function renderOnboardingPage(env: Env): string {
     .topbar__inner, main { width:min(100% - 40px,840px); margin:0 auto; }
     .topbar__inner { display:flex; min-height:60px; align-items:center; justify-content:space-between; gap:16px; }
     .brand { font-size:14px; font-weight:600; letter-spacing:-.01em; text-decoration:none; }
-    .repo { color:var(--muted); font-size:12px; text-decoration:none; }
-    .repo:hover { color:var(--blue); text-decoration:underline; text-underline-offset:3px; }
+    .archive-link { color:var(--muted); font-size:12px; text-decoration:none; }
+    .archive-link:hover { color:var(--blue); text-decoration:underline; text-underline-offset:3px; }
     main { padding:54px 0 56px; word-break:keep-all; }
     .intro { text-align:center; }
     .layout { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); align-items:center; gap:48px; margin-top:36px; }
@@ -74,14 +74,14 @@ export function renderOnboardingPage(env: Env): string {
     .notice p + p { margin-top:8px; }
     .notice a { color:#58a6ff; text-underline-offset:2px; }
     @media (max-width:720px) { main { padding-top:40px; } .layout { grid-template-columns:1fr; gap:28px; margin-top:28px; } }
-    @media (max-width:480px) { .topbar__inner,main { width:calc(100% - 24px); } .topbar__inner { min-height:52px; } .repo { display:none; } main { padding:32px 0 40px; } .lead { font-size:15px; } .card { padding:16px; } }
+    @media (max-width:480px) { .topbar__inner,main { width:calc(100% - 24px); } .topbar__inner { min-height:52px; } main { padding:32px 0 40px; } .lead { font-size:15px; } .card { padding:16px; } }
   </style>
 </head>
 <body>
   <header class="topbar">
     <div class="topbar__inner">
       <a class="brand" href="/">KISA Notice</a>
-      <a class="repo" href="https://github.com/doraemyon/KISA-Public-Bohonara-Support">GitHub에서 소스 보기</a>
+      <a class="archive-link" href="/notices/">공지 목록</a>
     </div>
   </header>
   <main>
@@ -106,8 +106,9 @@ export function renderOnboardingPage(env: Env): string {
             <div>
               <strong class="step__title">신청 명령 보내기</strong>
               <p class="step__detail">Telegram에서 <strong>시작</strong>을 누른 뒤, 봇의 개인 채팅에 아래 형식으로 보냅니다.</p>
-              <code class="step__command">/${APPLICATION_COMMAND} 계정명</code>
-              <p class="step__detail">명령은 <strong>붙여 쓰고</strong>, 공백 한 칸 뒤에 <strong>본인의 사내 솔루션 계정명</strong>을 입력하세요. 계정 형식은 영문 2자_숫자 5자리입니다. 비밀번호나 인증코드는 보내지 마세요.</p>
+              <code class="step__command">/${APPLICATION_COMMAND} 성명</code>
+              <p class="step__detail">예) <strong>/${APPLICATION_COMMAND} 이예원</strong></p>
+              <p class="step__detail">명령은 <strong>붙여 쓰고</strong>, 공백 한 칸 뒤에 <strong>본인의 성명</strong>을 입력하세요.</p>
             </div>
           </li>
           <li class="step">
@@ -124,12 +125,12 @@ export function renderOnboardingPage(env: Env): string {
         <h2>Telegram에서 신청</h2>
         <p class="handle">@${safeBotUsername}</p>
         <a class="button" href="${safeBotLink}">Telegram 봇 열기</a>
-        <p class="fineprint">계정명과 Telegram 프로필 정보는 관리자 승인에 사용되며, 승인 또는 거절 시 신청 데이터베이스에서 삭제됩니다.</p>
+        <p class="fineprint">성명과 Telegram 프로필 정보는 관리자 승인에 사용되며, 승인 또는 거절 시 신청 데이터베이스에서 삭제됩니다.</p>
       </aside>
     </div>
     <footer class="notice" aria-label="서비스 및 라이선스 안내">
       <p>본 서비스는 수익 목적 없이 운영하는 비상업적 프로젝트입니다. 한국인터넷진흥원(KISA)이 제공하는 <a href="https://www.boho.or.kr/kr/rss.do?bbsId=B0000133">보호나라 보안공지 RSS</a>를 활용해 새 공지를 Telegram으로 전달합니다. KISA와 별개로 운영되는 독립적인 비공식 알리미입니다.</p>
-      <p>© 2026 · <a href="https://github.com/doraemyon/KISA-Public-Bohonara-Support/blob/main/LICENSE">MIT License</a></p>
+      <p>© 2026 · MIT License</p>
     </footer>
   </main>
 </body>

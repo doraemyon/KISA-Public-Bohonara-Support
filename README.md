@@ -1,6 +1,6 @@
 # KISA 승인형 Telegram 알림 봇
 
-KISA 보호나라 보안공지를 Telegram 개인 메시지로 전달하는 소규모 승인형 알림 서비스입니다. 공개 가입 페이지의 QR로 봇을 열고 사내 솔루션 계정명을 제출하면 관리자가 가입 신청을 검토합니다. Telegram bot token, 관리자 ID, 검증에 사용하는 계정 접두사는 Cloudflare Worker Secret으로 관리합니다. 신청·구독 데이터는 공개 저장소에 넣지 않습니다.
+KISA 보호나라 보안공지를 Telegram 개인 메시지로 전달하는 소규모 승인형 알림 서비스입니다. 공개 가입 페이지의 QR로 봇을 열고 본인의 성명을 제출하면 관리자가 가입 신청을 검토합니다. Telegram bot token과 관리자 ID는 Cloudflare Worker Secret으로 관리합니다. 신청·구독 데이터는 공개 저장소에 넣지 않습니다.
 
 ## 주요 기능
 
@@ -15,7 +15,7 @@ KISA 보호나라 보안공지를 Telegram 개인 메시지로 전달하는 소�
 - 실패 지수 백오프 재시도
 - 봇 차단·탈퇴 사용자의 구독 자동 정리
 - KISA 기존 공지로 최초 상태를 만들고 과거 공지는 발송하지 않음
-- 국문·영문 공지 페이지 연결
+- Worker 주소에서 국문·영문 공지 열람, 복사, 다운로드
 
 ```text
 GitHub Public 저장소 ──배포──> Cloudflare Worker
@@ -27,13 +27,13 @@ GitHub Public 저장소 ──배포──> Cloudflare Worker
 
 ## 가입 신청과 접근 통제
 
-Worker 첫 화면의 QR 또는 버튼으로 Telegram 봇을 열고 **시작**을 누릅니다. 봇의 개인 채팅에 `/알림신청 계정명`을 입력하면 계정 형식과 비공개 접두사를 확인합니다. 형식을 통과한 신청만 관리자 개인 Telegram으로 전달됩니다. 관리자가 계정명과 신청자를 확인해 승인하면 구독이 시작됩니다. 비밀번호나 인증코드는 필요하지 않습니다.
+Worker 첫 화면의 QR 또는 버튼으로 Telegram 봇을 열고 **시작**을 누릅니다. 봇의 개인 채팅에 `/알림신청 성명`을 입력합니다. 예를 들어 `/알림신청 이예원`처럼 보냅니다. 관리자가 성명과 Telegram 신청자를 확인해 승인하면 구독이 시작됩니다.
 
 ```text
 [KISA 알림 봇 가입 신청]
 표시 이름: ...
 Telegram 사용자명: @...
-사내 솔루션 계정명: ...
+성명: ...
 Chat ID: ...
 
 [승인] [거절]
@@ -41,16 +41,20 @@ Chat ID: ...
 
 - 가입 페이지에는 관리자 API나 신청자 목록이 없습니다.
 - 승인 callback은 webhook secret과 `ADMIN_TELEGRAM_USER_ID`를 모두 확인합니다.
-- 표시 이름, Telegram 사용자명, 사내 솔루션 계정명은 승인 또는 거절 시 D1 신청 기록에서 삭제합니다.
+- 표시 이름, Telegram 사용자명, 신청 성명은 승인 또는 거절 시 D1 신청 기록에서 삭제합니다.
 - 같은 chat ID는 한 번만 신청할 수 있습니다.
 - 시간당 신규 신청은 기본 20건, 전체 승인 대기는 기본 100건입니다.
 - 관리자 신청 알림은 분당 최대 5건으로 제한합니다.
-- 계정 입력 안내는 같은 대화에 분당 한 번, 봇 전체에서 분당 최대 5회로 제한합니다. 신청 결과는 관리자 처리 후 전달됩니다.
+- 성명 입력 안내는 같은 대화에 분당 한 번, 봇 전체에서 분당 최대 5회로 제한합니다. 신청 결과는 관리자 처리 후 전달됩니다.
 - 기존 제한형 초대 링크도 관리자가 필요할 때 사용할 수 있습니다.
 - 초대 코드 원문은 DB에 저장하지 않고 SHA-256 해시만 저장합니다.
 - 사용 횟수는 1~20회, 유효기간은 1~30일로 제한합니다.
 - 구독자 최대 인원은 배포 변수로 제한합니다.
 - 관리자가 아닌 사용자는 초대 생성, 승인·거절, 신청자·구독자 조회와 강제 해제를 실행할 수 없습니다.
+
+## 공지 열람
+
+국문·영문 문서는 기존 공지 생성 작업에서 완성합니다. Worker는 내부 문서 주소에서 결과를 읽고 `/notices/` 아래의 공개 주소로 제공합니다. 양쪽 문서가 준비되기 전에는 같은 주소에서 게시 상태를 자동으로 확인합니다.
 
 ## 비용과 한도
 
@@ -123,7 +127,7 @@ Telegram token은 GitHub에 등록하지 않습니다. 첫 배포 후 Cloudflare
 | `CLOUDFLARE_D1_DATABASE_ID` | D1 Database ID |
 | `CLOUDFLARE_D1_DATABASE_NAME` | `kisa-public-bohonara-support` |
 | `BOT_USERNAME` | `@`를 제외한 BotFather 봇 사용자 이름 |
-| `NOTICE_PAGES_BASE_URL` | `https://doraemyon.github.io/KISA-Bohonara-Support` |
+| `PUBLIC_BASE_URL` | Telegram 버튼에 사용할 Worker의 공개 HTTPS 주소 |
 | `MAX_SUBSCRIBERS` | 권장 `50` |
 | `BROADCAST_BATCH_SIZE` | 권장 `20`, 최대 `20` |
 | `MAX_PENDING_APPLICATIONS` | 권장 `100` |
@@ -152,7 +156,7 @@ Cloudflare Worker의 **Settings → Variables and Secrets → Add**에서 모두
 | `TELEGRAM_BOT_TOKEN` | BotFather HTTP API token |
 | `TELEGRAM_WEBHOOK_SECRET` | `setup:telegram`이 출력한 값 |
 | `ADMIN_TELEGRAM_USER_ID` | `setup:telegram`이 출력한 관리자 숫자 ID |
-| `APPLICATION_ACCOUNT_PREFIX` | 실제 계정명에서 밑줄 앞에 오는 영문 두 글자 |
+| `NOTICE_ARCHIVE_ORIGIN` | Worker가 서버에서 읽는 번역 문서의 HTTPS 기본 주소 |
 
 이 값들은 Cloudflare에 암호화되어 저장되고 공개 GitHub 저장소에는 들어가지 않습니다.
 
@@ -196,7 +200,7 @@ https://kisa.YOUR-SUBDOMAIN.workers.dev/
 
 신규 신청은 관리자 Telegram에 승인·거절 버튼으로 도착합니다. 버튼을 사용할 수 없을 때는 `/approve CHAT_ID` 또는 `/reject CHAT_ID`로 동일하게 처리할 수 있습니다.
 
-계정명 입력 기능 도입 전의 승인 대기 신청은 Telegram에서 `/알림신청 계정명`을 다시 보내야 승인할 수 있습니다.
+신청 정보가 비어 있는 이전 신청은 Telegram에서 `/알림신청 성명`을 보내면 다시 접수됩니다.
 
 거절한 사용자의 재신청을 허용하려면 다음 명령으로 거절 기록을 삭제합니다.
 
@@ -223,7 +227,7 @@ https://kisa.YOUR-SUBDOMAIN.workers.dev/
 | 명령 | 권한 | 설명 |
 | --- | --- | --- |
 | `/start` | 신청자 | 가입 방법 안내 |
-| `/알림신청 계정명` | 신청자 | 사내 솔루션 계정명으로 승인 신청 |
+| `/알림신청 성명` | 신청자 | 본인의 성명으로 승인 신청 |
 | `/start 초대코드` | 초대 사용자 | 관리자 생성 링크로 즉시 구독 |
 | `/status` | 사용자 | 구독 상태 확인 |
 | `/stop` | 사용자 | 구독 해제 및 구독 데이터 삭제 |

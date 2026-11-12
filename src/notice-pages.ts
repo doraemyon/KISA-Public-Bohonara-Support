@@ -1,0 +1,254 @@
+import { noticeIdFromLink } from "./rss";
+import type { Env, InlineKeyboard } from "./types";
+
+type Language = "ko" | "en";
+
+const DOCUMENT_PATH = /^\/notices\/(\d{1,20})\/(ko|en)\/(notice\.txt)?$/;
+const STYLE_PATH = "/assets/style.css";
+const COPY_PATH = "/assets/app.js";
+const STATUS_PATH = "/assets/notice-status.js";
+const ICON_PATH = "/assets/notice-icon.svg";
+const KISA_ORIGIN = "https://www.boho.or.kr";
+const KISA_LOGO = "https://www.kisa.or.kr/resource/kor/images/sub/sub_CI_logo_signature_9.png";
+const ARCHIVE_CSP = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' https://www.kisa.or.kr; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+const NOTICE_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="#0d1117"/><path d="M9 6h10l4 4v16H9zM19 6v5h4M12 16h8m-8 4h8" fill="none" stroke="#58a6ff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+const NOTICE_STATUS_SCRIPT = `"use strict";
+const retry = document.getElementById("retry-button");
+const status = document.getElementById("check-status");
+const english = document.documentElement.lang === "en";
+let timer;
+async function check() {
+  if (retry.disabled) return;
+  clearTimeout(timer);
+  retry.disabled = true;
+  status.textContent = english ? "Checking publication status…" : "게시 상태를 확인하고 있습니다…";
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.set("check", String(Date.now()));
+    const response = await fetch(url, { cache: "no-store" });
+    if (response.ok) {
+      url.searchParams.delete("check");
+      url.searchParams.set("published", String(Date.now()));
+      window.location.replace(url);
+      return;
+    }
+    status.textContent = english ? "This page checks again automatically." : "아직 준비 중입니다. 잠시 후 자동으로 확인합니다.";
+  } catch {
+    status.textContent = english ? "Could not check the page. Retrying shortly." : "확인하지 못했습니다. 잠시 후 다시 시도합니다.";
+  } finally {
+    retry.disabled = false;
+    timer = setTimeout(check, 5000);
+  }
+}
+retry.addEventListener("click", check);
+timer = setTimeout(check, 1200);
+`;
+
+function httpsUrl(value: string | undefined): URL | null {
+  try {
+    const url = new URL(value?.trim() ?? "");
+    if (url.protocol === "https:" && !url.username && !url.password && !url.search && !url.hash) {
+      return url;
+    }
+  } catch {
+    // Invalid configuration is handled by the caller.
+  }
+  return null;
+}
+
+export function noticeKeyboard(env: Env, sourceLink: string): InlineKeyboard {
+  const keyboard: InlineKeyboard = [[{ text: "공지 열기", url: sourceLink }]];
+  const base = httpsUrl(env.PUBLIC_BASE_URL);
+  if (!base || base.pathname !== "/" || base.hostname.endsWith(".github.io")) return keyboard;
+  try {
+    const id = noticeIdFromLink(sourceLink);
+    keyboard.push([
+      { text: "국문 공지", url: `${base.origin}/notices/${id}/ko/` },
+      { text: "영문 공지", url: `${base.origin}/notices/${id}/en/` },
+    ]);
+  } catch {
+    // The original notice link remains available when its ID is missing.
+  }
+  return keyboard;
+}
+
+function archiveHeaders(contentType: string, cache = "no-store"): Headers {
+  return new Headers({
+    "Content-Type": `${contentType}; charset=utf-8`,
+    "Cache-Control": cache,
+    "Content-Security-Policy": ARCHIVE_CSP,
+    "Referrer-Policy": "no-referrer",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "X-Robots-Tag": "noindex, noarchive",
+  });
+}
+
+export function archiveLink(value: string, source: URL, base: URL): string | null {
+  if (value.startsWith("#")) return value;
+  try {
+    const target = new URL(value, source);
+    if (target.origin === base.origin && target.pathname.startsWith(base.pathname)) {
+      const path = "/" + target.pathname.slice(base.pathname.length);
+      if (path === "/" || path === "/index.html") return "/notices/";
+      if (DOCUMENT_PATH.test(path) || path === STYLE_PATH || path === COPY_PATH) return path;
+    }
+    if (target.origin === KISA_ORIGIN && target.pathname.startsWith("/kr/")) return target.href;
+  } catch {
+    // Malformed URLs are omitted from the mirrored page.
+  }
+  return null;
+}
+
+function mirrorHtml(response: Response, source: URL, base: URL): Response {
+  const rewrite = new HTMLRewriter()
+    .on("base", { element(element) { element.remove(); } })
+    .on("meta[http-equiv]", { element(element) { element.remove(); } })
+    .on("a[href]", {
+      element(element) {
+        const original = element.getAttribute("href") ?? "";
+        const href = archiveLink(original, source, base);
+        if (!href) element.removeAttribute("href");
+        else if (href !== original) element.setAttribute("href", href);
+        element.removeAttribute("ping");
+      },
+    })
+    .on("link", {
+      element(element) {
+        if (element.getAttribute("rel") === "icon") {
+          element.setAttribute("href", ICON_PATH);
+        } else if (
+          element.getAttribute("rel") === "stylesheet" &&
+          archiveLink(element.getAttribute("href") ?? "", source, base) === STYLE_PATH
+        ) {
+          element.setAttribute("href", STYLE_PATH);
+        } else {
+          element.remove();
+        }
+      },
+    })
+    .on("img", {
+      element(element) {
+        element.removeAttribute("srcset");
+        if (element.getAttribute("src") !== KISA_LOGO) element.remove();
+      },
+    })
+    .on("script", {
+      element(element) {
+        if (archiveLink(element.getAttribute("src") ?? "", source, base) === COPY_PATH) {
+          element.setAttribute("src", COPY_PATH);
+        } else {
+          element.remove();
+        }
+      },
+    });
+  return rewrite.transform(response);
+}
+
+function pendingNotice(id: string, language: Language, status: number): Response {
+  const english = language === "en";
+  const title = english ? "Preparing the notice" : "공지 문서를 준비하고 있습니다";
+  const description = english
+    ? "This page opens automatically once both the Korean and English documents are published."
+    : "국문·영문 문서 게시가 완료되면 이 페이지에서 자동으로 공지를 엽니다.";
+  const original = `${KISA_ORIGIN}/kr/bbs/view.do?bbsId=B0000133&amp;menuNo=205020&amp;nttId=${id}`;
+  return new Response(`<!doctype html>
+<html lang="${language}"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${title} · KISA Notice</title>
+<link rel="icon" href="${ICON_PATH}"><link rel="stylesheet" href="${STYLE_PATH}">
+<script src="${STATUS_PATH}" defer></script></head><body>
+<header class="site-header"><div class="site-header__inner">
+<a class="site-brand" href="/notices/"><span class="site-logo"><img src="${KISA_LOGO}" alt=""></span><span class="site-name">KISA Notice</span></a>
+</div></header>
+<main class="page-shell"><section class="pending-card">
+<div class="pending-card__mark" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1Zm0 1.5a5.5 5.5 0 1 1 0 11 5.5 5.5 0 0 1 0-11Zm-.75 2.25h1.5v3l2 1.5-.9 1.2-2.6-1.95Z"/></svg></div>
+<p class="pending-card__eyebrow">Security notice</p><h1>${title}</h1>
+<p class="pending-card__description">${description}</p>
+<div class="pending-card__actions">
+<button class="button button--primary" id="retry-button" type="button">${english ? "Check again" : "다시 확인"}</button>
+<a class="button" href="${original}">${english ? "KISA source" : "KISA 원문"}</a>
+<a class="button" href="/notices/">${english ? "Notice list" : "공지 목록"}</a>
+</div><p class="pending-card__status" id="check-status" aria-live="polite"></p>
+</section></main></body></html>`, { status, headers: archiveHeaders("text/html") });
+}
+
+async function archiveFetch(base: URL, path: string, version: string, method = "GET"): Promise<Response> {
+  const target = new URL(path.slice(1), base);
+  if (version) target.searchParams.set("v", version);
+  return fetch(target, { method, redirect: "manual", signal: AbortSignal.timeout(8000) });
+}
+
+async function pairIsPublished(base: URL, id: string, language: Language, version: string): Promise<boolean> {
+  const peer = language === "ko" ? "en" : "ko";
+  const [metadata, counterpart] = await Promise.all([
+    archiveFetch(base, `/notices/${id}/metadata.json`, version),
+    archiveFetch(base, `/notices/${id}/${peer}/`, version, "HEAD"),
+  ]);
+  if (!metadata.ok || !counterpart.ok) {
+    await metadata.body?.cancel();
+    return false;
+  }
+  const record = await metadata.json<{ notice_id?: string; translation_status?: string }>();
+  // Older published pairs predate the explicit translation_status field.
+  return record.notice_id === id && (record.translation_status ?? "complete") === "complete";
+}
+
+export async function serveNoticePage(url: URL, env: Env): Promise<Response | null> {
+  const path = url.pathname;
+  if (path === "/notices" || /^\/notices\/\d{1,20}\/(ko|en)$/.test(path)) {
+    return new Response(null, { status: 308, headers: { Location: path + "/" } });
+  }
+  if (path === ICON_PATH) {
+    return new Response(NOTICE_ICON, { headers: archiveHeaders("image/svg+xml", "public, max-age=86400") });
+  }
+  if (path === STATUS_PATH) {
+    return new Response(NOTICE_STATUS_SCRIPT, { headers: archiveHeaders("text/javascript", "public, max-age=300") });
+  }
+  const document = DOCUMENT_PATH.exec(path);
+  const index = path === "/notices/";
+  const asset = path === STYLE_PATH || path === COPY_PATH;
+  if (!document && !index && !asset) return null;
+
+  const id = document?.[1];
+  const language = document?.[2] as Language | undefined;
+  const text = Boolean(document?.[3]);
+  const base = httpsUrl(env.NOTICE_ARCHIVE_ORIGIN);
+  const unavailable = (status: number) => id && language && !text
+    ? pendingNotice(id, language, status)
+    : new Response(status === 404 ? "문서를 찾을 수 없습니다." : "공지 문서를 확인하는 중입니다. 잠시 후 다시 시도해 주세요.", {
+        status, headers: archiveHeaders("text/plain"),
+      });
+  if (!base || base.origin === url.origin) return unavailable(503);
+  base.pathname = base.pathname.replace(/\/*$/, "/");
+
+  const upstreamPath = index ? "/" : path;
+  const checking = url.searchParams.has("check") || url.searchParams.has("published");
+  const version = checking ? String(Math.floor(Date.now() / 5000)) : "";
+  try {
+    const response = await archiveFetch(base, upstreamPath, version);
+    if (!response.ok) {
+      await response.body?.cancel();
+      return unavailable(response.status === 404 ? 404 : 503);
+    }
+    if (id && language && !(await pairIsPublished(base, id, language, version))) {
+      await response.body?.cancel();
+      return unavailable(404);
+    }
+    const type = text ? "text/plain" : path === STYLE_PATH ? "text/css" : path === COPY_PATH ? "text/javascript" : "text/html";
+    const upstreamType = response.headers.get("Content-Type")?.split(";")[0].toLowerCase();
+    if (upstreamType !== type && !(type === "text/javascript" && upstreamType === "application/javascript")) {
+      await response.body?.cancel();
+      return unavailable(503);
+    }
+    const result = new Response(response.body, {
+      headers: archiveHeaders(type, checking ? "no-store" : "public, max-age=30"),
+    });
+    return type === "text/html"
+      ? mirrorHtml(result, new URL(upstreamPath.slice(1), base), base)
+      : result;
+  } catch {
+    return unavailable(503);
+  }
+}
