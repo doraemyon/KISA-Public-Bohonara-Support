@@ -13,6 +13,8 @@ describe("onboarding page", () => {
 
     expect(html).toContain("https://t.me/KisaNoticeBot?start=apply");
     expect(html).toContain("<svg");
+    expect(html).toContain('id="telegram-qr-ink"');
+    expect(html).toContain("data-telegram-logo");
     expect(html).toContain("Telegram 봇 열기");
     expect(html).not.toContain("quickchart");
   });

@@ -1,7 +1,6 @@
-import { renderSVG } from "uqr";
-
 import { APPLICATION_COMMAND } from "./access";
 import { required } from "./config";
+import { renderTelegramQr } from "./telegram-qr";
 import type { Env } from "./types";
 
 function escapeHtml(value: string): string {
@@ -24,13 +23,7 @@ export function telegramApplicationLink(env: Env): string {
 export function renderOnboardingPage(env: Env): string {
   const botLink = telegramApplicationLink(env);
   const botUsername = new URL(botLink).pathname.slice(1);
-  const qr = renderSVG(botLink, {
-    ecc: "M",
-    border: 3,
-    pixelSize: 6,
-    blackColor: "#0d1117",
-    whiteColor: "#ffffff",
-  });
+  const qr = renderTelegramQr(botLink);
   const safeBotLink = escapeHtml(botLink);
   const safeBotUsername = escapeHtml(botUsername);
 
@@ -63,7 +56,7 @@ export function renderOnboardingPage(env: Env): string {
     .step strong { display:block; margin:2px 0 4px; font-size:14px; }
     .step span { display:block; color:var(--muted); font-size:13px; line-height:1.55; }
     .card { padding:24px; border:1px solid var(--border); border-radius:8px; background:var(--panel); box-shadow:0 16px 48px rgba(1,4,9,.35); }
-    .qr { display:flex; width:100%; aspect-ratio:1; padding:16px; align-items:center; justify-content:center; border-radius:6px; background:#fff; }
+    .qr { width:100%; aspect-ratio:1; overflow:hidden; border-radius:12px; background:#fff; }
     .qr svg { display:block; width:100%; height:100%; }
     .card h2 { margin:20px 0 6px; font-size:18px; letter-spacing:-.02em; }
     .handle { margin:0 0 18px; color:var(--muted); font:13px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace; }
@@ -95,7 +88,7 @@ export function renderOnboardingPage(env: Env): string {
         </ol>
       </section>
       <aside class="card" aria-label="Telegram 가입 신청">
-        <div class="qr" aria-label="Telegram 봇 가입 QR 코드">${qr}</div>
+        <div class="qr">${qr}</div>
         <h2>Telegram에서 신청</h2>
         <p class="handle">@${safeBotUsername}</p>
         <a class="button" href="${safeBotLink}">Telegram 봇 열기</a>
