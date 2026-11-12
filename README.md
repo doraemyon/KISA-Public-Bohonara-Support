@@ -138,8 +138,8 @@ Telegram token은 GitHub에 등록하지 않습니다. 첫 배포 후 Cloudflare
 
 1. **Actions → Verify and deploy bot → Run workflow**를 실행합니다.
 2. D1 migration과 Worker 배포가 성공했는지 확인합니다.
-3. Cloudflare **Workers & Pages**에서 생성된 `kisa-public-bohonara-support` Worker를 엽니다.
-4. Worker의 `workers.dev` 주소를 복사합니다.
+3. Cloudflare **Workers & Pages**에서 생성된 `kisa` Worker를 엽니다.
+4. `https://kisa.<계정-서브도메인>.workers.dev/` 주소를 복사합니다. 이 주소가 가입 QR 페이지입니다.
 
 첫 배포에서는 `ENABLE_CRON=false`이므로 아직 RSS 확인 작업이 실행되지 않습니다.
 
@@ -158,13 +158,13 @@ Cloudflare Worker의 **Settings → Variables and Secrets → Add**에서 모두
 
 ## 7. Telegram Webhook 연결 자동화
 
-개인 PC PowerShell에서 실행합니다. `WORKER_BASE_URL`은 Cloudflare에 표시된 `https://...workers.dev` 주소입니다.
+개인 PC PowerShell에서 실행합니다. `WORKER_BASE_URL`에는 아래 예시의 `YOUR-SUBDOMAIN`을 실제 Cloudflare 계정 서브도메인으로 바꿔 넣습니다.
 
 ```powershell
 $env:TELEGRAM_BOT_TOKEN = "BotFather_token"
 $env:TELEGRAM_WEBHOOK_SECRET = "Cloudflare에_등록한_동일한_값"
 $env:ADMIN_TELEGRAM_USER_ID = "관리자_숫자_ID"
-$env:WORKER_BASE_URL = "https://worker-name.account.workers.dev"
+$env:WORKER_BASE_URL = "https://kisa.YOUR-SUBDOMAIN.workers.dev"
 npm run setup:telegram
 Remove-Item Env:TELEGRAM_BOT_TOKEN
 Remove-Item Env:TELEGRAM_WEBHOOK_SECRET
@@ -177,13 +177,13 @@ Remove-Item Env:WORKER_BASE_URL
 상태 확인:
 
 ```text
-https://worker-name.account.workers.dev/healthz
+https://kisa.YOUR-SUBDOMAIN.workers.dev/healthz
 ```
 
 가입 페이지는 Worker 기본 주소입니다.
 
 ```text
-https://worker-name.account.workers.dev/
+https://kisa.YOUR-SUBDOMAIN.workers.dev/
 ```
 
 ## 8. 1분 공지 확인 활성화

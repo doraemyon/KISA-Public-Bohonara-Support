@@ -1,6 +1,7 @@
 {
   "$schema": "../node_modules/wrangler/config-schema.json",
-  "name": "kisa-public-bohonara-support",
+  "name": "kisa",
+  "workers_dev": true,
   "main": "../src/index.ts",
   "compatibility_date": "2026-11-10",
   "triggers": {
