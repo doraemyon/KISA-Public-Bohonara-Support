@@ -114,6 +114,7 @@ function mirrorHtml(response: Response, source: URL, base: URL, language?: Langu
     })
     .on("main.page-shell", {
       element(element) {
+        if (!language) return;
         const classes = element.getAttribute("class");
         element.setAttribute("class", `${classes} public-content`);
       },
