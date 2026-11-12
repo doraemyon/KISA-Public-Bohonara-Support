@@ -110,7 +110,7 @@ function mirrorHtml(response: Response, source: URL, base: URL, language?: Langu
     .on("meta[http-equiv]", { element(element) { element.remove(); } })
     .on("head", { element(element) { element.append(SITE_SHELL_STYLESHEET, { html: true }); } })
     .on("header.site-header", {
-      element(element) { element.replace(renderSiteHeader(archiveLabel(language)), { html: true }); },
+      element(element) { element.replace(renderSiteHeader(archiveLabel(language), "/notice"), { html: true }); },
     })
     .on("main.page-shell", {
       element(element) {
@@ -173,7 +173,7 @@ function pendingNotice(id: string, language: Language, status: number): Response
 <title>${title} · ${archiveLabel(language)}</title>
 <link rel="icon" href="${NOTICE_ICON_PATH}"><link rel="stylesheet" href="${STYLE_PATH}">${SITE_SHELL_STYLESHEET}
 <script src="${STATUS_PATH}" defer></script></head><body>
-${renderSiteHeader(archiveLabel(language))}
+${renderSiteHeader(archiveLabel(language), "/notice")}
 <main class="page-shell public-content"><section class="pending-card">
 <div class="pending-card__mark" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1Zm0 1.5a5.5 5.5 0 1 1 0 11 5.5 5.5 0 0 1 0-11Zm-.75 2.25h1.5v3l2 1.5-.9 1.2-2.6-1.95Z"/></svg></div>
 <p class="pending-card__eyebrow">Security notice</p><h1>${title}</h1>

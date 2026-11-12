@@ -73,7 +73,7 @@ export function renderOnboardingPage(env: Env): string {
   </style>
 </head>
 <body>
-  ${renderSiteHeader("보안공지 알리미", true)}
+  ${renderSiteHeader("보안공지 알리미", "/", true)}
   <main class="public-content">
     <header class="intro">
       <p class="eyebrow">비공식 Telegram 알림 봇 서비스</p>
