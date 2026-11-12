@@ -111,8 +111,8 @@ Cloudflare Account ID도 Dashboard에서 확인합니다.
 
 | 이름 | 값 |
 | --- | --- |
-| `CLOUDFLARE_API_TOKEN` | 앞 단계의 제한된 Cloudflare API token |
-| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare Account ID |
+| `PUBLIC_BOT_CLOUDFLARE_API_TOKEN` | 앞 단계에서 발급한 공개 봇 배포용 Cloudflare API token |
+| `PUBLIC_BOT_CLOUDFLARE_ACCOUNT_ID` | 공개 봇을 배포할 Cloudflare Account ID |
 
 Telegram token은 GitHub에 등록하지 않습니다. 첫 배포 후 Cloudflare Worker Secret에 직접 등록합니다.
 
