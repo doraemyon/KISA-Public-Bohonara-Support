@@ -34,7 +34,7 @@ export function renderOnboardingPage(env: Env): string {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="index,follow">
   <meta name="description" content="KISA 보호나라 보안공지를 Telegram으로 전하는 독립적인 비공식 알리미">
-  <title>비공식 보호나라 보안공지 알림 신청</title>
+  <title>보호나라 보안공지 알림 봇 구독</title>
   <link rel="icon" type="image/png" href="${NOTICE_ICON_PATH}">
   <style>
     :root { color-scheme: dark; font-family: -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR","Apple SD Gothic Neo","Malgun Gothic",sans-serif; --bg:#0d1117; --panel:#161b22; --panel-2:#21262d; --border:#30363d; --text:#f0f6fc; --muted:#8b949e; --blue:#2f81f7; --green:#238636; }
@@ -87,9 +87,9 @@ export function renderOnboardingPage(env: Env): string {
   </header>
   <main>
     <header class="intro">
-      <p class="eyebrow">비공식 Telegram 알리미</p>
-      <h1>보호나라 보안공지 알림</h1>
-      <p class="lead">보호나라에 새 보안공지가 등록되면 Telegram 개인 메시지로 전달합니다. 가입 신청 후 관리자 승인이 완료되면 별도 설정 없이 알림이 시작됩니다.</p>
+      <p class="eyebrow">비공식 Telegram 알림 봇 서비스</p>
+      <h1>보호나라 보안공지를 놓치지 마세요.</h1>
+      <p class="lead">보호나라에 새 보안공지가 등록되면 Telegram 개인 메시지로 전달합니다.<br>가입 신청 후 관리자 승인이 완료되면 별도 설정 없이 알림이 시작됩니다.</p>
     </header>
     <div class="layout">
       <section class="signup-steps" aria-labelledby="signup-steps-title">
@@ -130,7 +130,7 @@ export function renderOnboardingPage(env: Env): string {
       </aside>
     </div>
     <footer class="notice" aria-label="서비스 및 라이선스 안내">
-      <p>본 서비스는 수익 목적 없이 운영하는 비상업적 프로젝트입니다. 한국인터넷진흥원(KISA)이 제공하는 <a href="https://www.boho.or.kr/kr/rss.do?bbsId=B0000133">보호나라 보안공지 RSS</a>를 활용해 새 공지를 Telegram으로 전달합니다. KISA와 별개로 운영되는 독립적인 비공식 알리미입니다.</p>
+      <p>본 서비스는 수익 목적 없이 운영하는 비상업적 프로젝트이며, KISA와 별개로 운영되는 독립적인 비공식 알리미 서비스입니다.<br>한국인터넷진흥원(KISA)이 제공하는 <a href="https://www.boho.or.kr/kr/rss.do?bbsId=B0000133">보호나라 보안공지 RSS</a>를 활용해 새 공지를 Telegram으로 전달합니다.</p>
       <p>© 2026 · MIT License</p>
     </footer>
   </main>
