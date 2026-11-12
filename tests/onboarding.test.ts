@@ -31,7 +31,8 @@ describe("onboarding page", () => {
       APPLICATION_ACCOUNT_PREFIX: "xyz-private-test",
     });
 
-    expect(html).toContain("/알림신청 계정명");
+    expect(html).toContain('<code class="step__command">/알림신청 계정명</code>');
+    expect(html).toContain("<strong>본인의 사내 솔루션 계정명</strong>");
     expect(html).toContain("영문 2자_숫자 5자리");
     expect(html).not.toContain("xyz-private-test");
   });

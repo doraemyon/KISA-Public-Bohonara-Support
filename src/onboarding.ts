@@ -50,11 +50,14 @@ export function renderOnboardingPage(env: Env): string {
     .eyebrow { margin:0 0 12px; color:#58a6ff; font-size:13px; font-weight:600; }
     h1 { max-width:650px; margin:0; font-size:clamp(34px,5.2vw,56px); line-height:1.12; letter-spacing:-.045em; }
     .lead { max-width:620px; margin:20px 0 0; color:var(--muted); font-size:17px; line-height:1.7; }
-    .steps { display:grid; margin:36px 0 0; padding:0; gap:18px; list-style:none; }
-    .step { display:grid; grid-template-columns:32px minmax(0,1fr); gap:12px; }
-    .step__number { display:flex; width:28px; height:28px; align-items:center; justify-content:center; border:1px solid var(--border); border-radius:50%; background:var(--panel); color:var(--muted); font-size:12px; font-weight:600; }
-    .step strong { display:block; margin:2px 0 4px; font-size:14px; }
-    .step span { display:block; color:var(--muted); font-size:13px; line-height:1.55; }
+    .steps-title { margin:32px 0 12px; font-size:16px; }
+    .steps { display:grid; margin:0; padding:0; gap:16px; list-style:none; }
+    .step { display:grid; grid-template-columns:28px minmax(0,1fr); align-items:start; gap:12px; }
+    .step__number { display:grid; width:28px; height:28px; place-items:center; border:1px solid var(--border); border-radius:50%; background:var(--panel); color:var(--text); font-size:12px; font-weight:600; line-height:1; font-variant-numeric:tabular-nums; }
+    .step__title { display:block; margin:0 0 2px; font-size:14px; line-height:28px; }
+    .step__detail { margin:0; color:var(--muted); font-size:13px; line-height:1.65; }
+    .step__detail strong { color:var(--text); }
+    .step__command { display:inline-block; max-width:100%; margin:9px 0 7px; padding:7px 11px; border:1px solid var(--border); border-radius:6px; background:var(--panel); color:#e6edf3; font:600 14px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace; overflow-wrap:anywhere; }
     .card { padding:24px; border:1px solid var(--border); border-radius:8px; background:var(--panel); box-shadow:0 16px 48px rgba(1,4,9,.35); }
     .qr { width:100%; aspect-ratio:1; overflow:hidden; border-radius:12px; background:#fff; }
     .qr svg { display:block; width:100%; height:100%; }
@@ -81,10 +84,31 @@ export function renderOnboardingPage(env: Env): string {
         <p class="eyebrow">Telegram notification</p>
         <h1>KISA 보안공지를<br>놓치지 마세요.</h1>
         <p class="lead">보호나라에 새 보안공지가 등록되면 Telegram 개인 메시지로 전달합니다. 가입 신청 후 관리자 승인이 완료되면 별도 설정 없이 알림이 시작됩니다.</p>
-        <ol class="steps">
-          <li class="step"><span class="step__number">1</span><div><strong>Telegram 봇 열기</strong><span>휴대폰으로 QR을 촬영하거나 오른쪽 버튼을 누릅니다.</span></div></li>
-          <li class="step"><span class="step__number">2</span><div><strong>사내 솔루션 계정명 입력</strong><span>가입 자격 확인을 위해 Telegram에서 시작 버튼을 누른 뒤 <code>/${APPLICATION_COMMAND} 계정명</code>을 보내 주세요. 계정 형식은 영문 2자_숫자 5자리입니다. 비밀번호나 인증코드는 보내지 마세요.</span></div></li>
-          <li class="step"><span class="step__number">3</span><div><strong>관리자 승인 기다리기</strong><span>승인 완료 메시지가 도착한 뒤부터 새 공지를 받아볼 수 있습니다.</span></div></li>
+        <h2 class="steps-title">가입 방법</h2>
+        <ol class="steps" role="list">
+          <li class="step">
+            <span class="step__number" aria-hidden="true">1</span>
+            <div>
+              <strong class="step__title">Telegram 봇 열기</strong>
+              <p class="step__detail">QR을 스캔하거나 <strong>Telegram 봇 열기</strong>를 누릅니다.</p>
+            </div>
+          </li>
+          <li class="step">
+            <span class="step__number" aria-hidden="true">2</span>
+            <div>
+              <strong class="step__title">신청 명령 보내기</strong>
+              <p class="step__detail">Telegram에서 <strong>시작</strong>을 누른 뒤, 봇의 개인 채팅에 아래 형식으로 보냅니다.</p>
+              <code class="step__command">/${APPLICATION_COMMAND} 계정명</code>
+              <p class="step__detail">명령은 <strong>붙여 쓰고</strong>, 공백 한 칸 뒤에 <strong>본인의 사내 솔루션 계정명</strong>을 입력하세요. 계정 형식은 영문 2자_숫자 5자리입니다. 비밀번호나 인증코드는 보내지 마세요.</p>
+            </div>
+          </li>
+          <li class="step">
+            <span class="step__number" aria-hidden="true">3</span>
+            <div>
+              <strong class="step__title">관리자 승인 기다리기</strong>
+              <p class="step__detail"><strong>승인 완료 메시지</strong>가 도착하면 이후 등록되는 보안공지를 받아볼 수 있습니다.</p>
+            </div>
+          </li>
         </ol>
       </section>
       <aside class="card" aria-label="Telegram 가입 신청">
