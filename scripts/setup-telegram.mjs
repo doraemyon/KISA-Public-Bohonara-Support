@@ -35,10 +35,10 @@ await telegram("setMyCommands", {
 });
 await telegram("setMyDescription", {
   description:
-    "KISA 보호나라 보안공지를 Telegram 개인 메시지로 전달합니다. 가입하려면 /알림신청 뒤에 본인의 성명을 입력하고 관리자 승인을 받아 주세요.",
+    "KISA 보호나라 보안공지를 전하는 독립적인 비공식 Telegram 알리미입니다. 가입하려면 /알림신청 뒤에 본인의 성명을 입력하고 관리자 승인을 받아 주세요.",
 });
 await telegram("setMyShortDescription", {
-  short_description: "관리자 승인형 KISA 보안공지 알림",
+  short_description: "보호나라 보안공지 비공식 알리미",
 });
 
 let adminId = process.env.ADMIN_TELEGRAM_USER_ID?.trim() ?? "";

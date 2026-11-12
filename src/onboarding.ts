@@ -33,8 +33,8 @@ export function renderOnboardingPage(env: Env): string {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="index,follow">
-  <meta name="description" content="KISA 보호나라 보안공지를 Telegram으로 받아보는 승인형 알림 서비스">
-  <title>KISA 보안공지 Telegram 알림 신청</title>
+  <meta name="description" content="KISA 보호나라 보안공지를 Telegram으로 전하는 독립적인 비공식 알리미">
+  <title>비공식 보호나라 보안공지 알림 신청</title>
   <style>
     :root { color-scheme: dark; font-family: -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR","Apple SD Gothic Neo","Malgun Gothic",sans-serif; --bg:#0d1117; --panel:#161b22; --panel-2:#21262d; --border:#30363d; --text:#f0f6fc; --muted:#8b949e; --blue:#2f81f7; --green:#238636; }
     * { box-sizing: border-box; }
@@ -80,14 +80,14 @@ export function renderOnboardingPage(env: Env): string {
 <body>
   <header class="topbar">
     <div class="topbar__inner">
-      <a class="brand" href="/">KISA Notice</a>
+      <a class="brand" href="/">보안공지 알리미</a>
       <a class="archive-link" href="/notices/">공지 목록</a>
     </div>
   </header>
   <main>
     <header class="intro">
-      <p class="eyebrow">Telegram notification</p>
-      <h1>KISA 보안공지를 놓치지 마세요.</h1>
+      <p class="eyebrow">비공식 Telegram 알리미</p>
+      <h1>보호나라 보안공지 알림</h1>
       <p class="lead">보호나라에 새 보안공지가 등록되면 Telegram 개인 메시지로 전달합니다. 가입 신청 후 관리자 승인이 완료되면 별도 설정 없이 알림이 시작됩니다.</p>
     </header>
     <div class="layout">

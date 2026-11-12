@@ -31,7 +31,7 @@ if (!/^[A-Za-z0-9_]{5,32}$/.test(botUsername)) {
 }
 
 const publicBaseUrl = new URL(
-  process.env.PUBLIC_BASE_URL?.trim() || "https://kisa.kisa-public-bohonara-support.workers.dev",
+  process.env.PUBLIC_BASE_URL?.trim() || "https://kisa.bohonara.workers.dev",
 );
 if (
   publicBaseUrl.protocol !== "https:" || publicBaseUrl.username || publicBaseUrl.password ||

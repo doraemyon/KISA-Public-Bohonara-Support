@@ -9,8 +9,7 @@ const COPY_PATH = "/assets/app.js";
 const STATUS_PATH = "/assets/notice-status.js";
 const ICON_PATH = "/assets/notice-icon.svg";
 const KISA_ORIGIN = "https://www.boho.or.kr";
-const KISA_LOGO = "https://www.kisa.or.kr/resource/kor/images/sub/sub_CI_logo_signature_9.png";
-const ARCHIVE_CSP = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' https://www.kisa.or.kr; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+const ARCHIVE_CSP = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 const NOTICE_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="#0d1117"/><path d="M9 6h10l4 4v16H9zM19 6v5h4M12 16h8m-8 4h8" fill="none" stroke="#58a6ff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
 const NOTICE_STATUS_SCRIPT = `"use strict";
@@ -101,10 +100,15 @@ export function archiveLink(value: string, source: URL, base: URL): string | nul
   return null;
 }
 
-function mirrorHtml(response: Response, source: URL, base: URL): Response {
+function archiveLabel(language: Language = "ko"): string {
+  return language === "en" ? "Unofficial Notice Viewer" : "비공식 보안공지 알리미";
+}
+
+function mirrorHtml(response: Response, source: URL, base: URL, language?: Language): Response {
   const rewrite = new HTMLRewriter()
     .on("base", { element(element) { element.remove(); } })
     .on("meta[http-equiv]", { element(element) { element.remove(); } })
+    .on(".site-name", { element(element) { element.setInnerContent(archiveLabel(language)); } })
     .on("a[href]", {
       element(element) {
         const original = element.getAttribute("href") ?? "";
@@ -131,7 +135,12 @@ function mirrorHtml(response: Response, source: URL, base: URL): Response {
     .on("img", {
       element(element) {
         element.removeAttribute("srcset");
-        if (element.getAttribute("src") !== KISA_LOGO) element.remove();
+        element.remove();
+      },
+    })
+    .on(".site-logo", {
+      element(element) {
+        element.setInnerContent(`<img src="${ICON_PATH}" alt="">`, { html: true });
       },
     })
     .on("script", {
@@ -156,11 +165,11 @@ function pendingNotice(id: string, language: Language, status: number): Response
   return new Response(`<!doctype html>
 <html lang="${language}"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${title} · KISA Notice</title>
+<title>${title} · ${archiveLabel(language)}</title>
 <link rel="icon" href="${ICON_PATH}"><link rel="stylesheet" href="${STYLE_PATH}">
 <script src="${STATUS_PATH}" defer></script></head><body>
 <header class="site-header"><div class="site-header__inner">
-<a class="site-brand" href="/notices/"><span class="site-logo"><img src="${KISA_LOGO}" alt=""></span><span class="site-name">KISA Notice</span></a>
+<a class="site-brand" href="/notices/"><span class="site-logo"><img src="${ICON_PATH}" alt=""></span><span class="site-name">${archiveLabel(language)}</span></a>
 </div></header>
 <main class="page-shell"><section class="pending-card">
 <div class="pending-card__mark" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1Zm0 1.5a5.5 5.5 0 1 1 0 11 5.5 5.5 0 0 1 0-11Zm-.75 2.25h1.5v3l2 1.5-.9 1.2-2.6-1.95Z"/></svg></div>
@@ -246,7 +255,7 @@ export async function serveNoticePage(url: URL, env: Env): Promise<Response | nu
       headers: archiveHeaders(type, checking ? "no-store" : "public, max-age=30"),
     });
     return type === "text/html"
-      ? mirrorHtml(result, new URL(upstreamPath.slice(1), base), base)
+      ? mirrorHtml(result, new URL(upstreamPath.slice(1), base), base, language)
       : result;
   } catch {
     return unavailable(503);
