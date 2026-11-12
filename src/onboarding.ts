@@ -67,6 +67,9 @@ export function renderOnboardingPage(env: Env): string {
     .button:hover { background:#2ea043; }
     .fineprint { margin:16px 0 0; color:var(--muted); font-size:11px; line-height:1.55; }
     .notice { margin-top:52px; padding-top:20px; border-top:1px solid var(--border); color:var(--muted); font-size:12px; line-height:1.65; }
+    .notice p { margin:0; }
+    .notice p + p { margin-top:8px; }
+    .notice a { color:#58a6ff; text-underline-offset:2px; }
     @media (max-width:820px) { main { padding-top:40px; } .layout { grid-template-columns:1fr; gap:40px; } .card { width:min(100%,420px); } }
     @media (max-width:480px) { .topbar__inner,main { width:min(100% - 24px,1040px); } .topbar__inner { min-height:52px; } .repo { display:none; } main { padding:32px 0 48px; } h1 { font-size:34px; } .lead { font-size:15px; } .card { padding:16px; } }
   </style>
@@ -119,7 +122,10 @@ export function renderOnboardingPage(env: Env): string {
         <p class="fineprint">계정명과 Telegram 프로필 정보는 관리자 승인에 사용되며, 승인 또는 거절 시 신청 데이터베이스에서 삭제됩니다.</p>
       </aside>
     </div>
-    <p class="notice">본 서비스는 공개된 KISA 보호나라 보안공지를 전달합니다. 승인은 구독 권한을 부여하는 절차이며, KISA의 공식 서비스나 보안 권고를 대체하지 않습니다.</p>
+    <footer class="notice" aria-label="서비스 및 라이선스 안내">
+      <p>본 서비스는 수익 목적 없이 운영하는 비상업적 프로젝트입니다. 한국인터넷진흥원(KISA)이 제공하는 <a href="https://www.boho.or.kr/kr/rss.do?bbsId=B0000133">보호나라 보안공지 RSS</a>를 활용해 새 공지를 Telegram으로 전달합니다. KISA와 별개로 운영되는 독립적인 비공식 알리미입니다.</p>
+      <p>프로젝트 소스 코드는 <a href="https://github.com/doraemyon/KISA-Public-Bohonara-Support/blob/main/LICENSE">MIT 라이선스</a>로 공개되어 있습니다. 누구나 저장소를 <a href="https://github.com/doraemyon/KISA-Public-Bohonara-Support/fork">포크</a>하고 라이선스 조건에 따라 소스를 수정·재배포할 수 있습니다.</p>
+    </footer>
   </main>
 </body>
 </html>`;
