@@ -100,7 +100,7 @@ export function archiveLink(value: string, source: URL, base: URL): string | nul
 }
 
 function archiveLabel(language: Language = "ko"): string {
-  return language === "en" ? "Unofficial Notice Viewer" : "비공식 보안공지 알리미";
+  return language === "en" ? "Unofficial Notice Viewer" : "비공식 보호나라 보안공지";
 }
 
 function mirrorHtml(response: Response, source: URL, base: URL, language?: Language): Response {
