@@ -3,6 +3,9 @@
   "name": "kisa",
   "workers_dev": true,
   "main": "../src/index.ts",
+  "assets": {
+    "directory": "../public"
+  },
   "compatibility_date": "2026-11-10",
   "triggers": {
     "crons": ["* * * * *"]

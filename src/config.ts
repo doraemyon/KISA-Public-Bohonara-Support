@@ -1,5 +1,7 @@
 import type { Env } from "./types";
 
+export const NOTICE_ICON_PATH = "/assets/notice-icon.png";
+
 export function required(value: string | undefined, name: string): string {
   const normalized = value?.trim() ?? "";
   if (!normalized) {
