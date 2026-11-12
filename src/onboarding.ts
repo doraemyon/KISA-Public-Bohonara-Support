@@ -89,7 +89,7 @@ export function renderOnboardingPage(env: Env): string {
         <p class="lead">보호나라에 새 보안공지가 등록되면 Telegram 개인 메시지로 전달합니다. 가입 신청 후 관리자 승인이 완료되면 별도 설정 없이 알림이 시작됩니다.</p>
         <ol class="steps">
           <li class="step"><span class="step__number">1</span><div><strong>Telegram 봇 열기</strong><span>휴대폰으로 QR을 촬영하거나 오른쪽 버튼을 누릅니다.</span></div></li>
-          <li class="step"><span class="step__number">2</span><div><strong>시작 버튼 누르기</strong><span>Telegram의 시작 버튼을 누르면 가입 신청이 접수됩니다.</span></div></li>
+          <li class="step"><span class="step__number">2</span><div><strong>사내 솔루션 계정명 입력</strong><span>가입 자격 확인을 위해 Telegram에서 시작 버튼을 누른 뒤 <code>/apply 계정명</code>을 보내 주세요. 계정 형식은 영문 2자_숫자 5자리입니다. 비밀번호나 인증코드는 보내지 마세요.</span></div></li>
           <li class="step"><span class="step__number">3</span><div><strong>관리자 승인 기다리기</strong><span>승인 완료 메시지가 도착한 뒤부터 새 공지를 받아볼 수 있습니다.</span></div></li>
         </ol>
       </section>
@@ -98,7 +98,7 @@ export function renderOnboardingPage(env: Env): string {
         <h2>Telegram에서 신청</h2>
         <p class="handle">@${safeBotUsername}</p>
         <a class="button" href="${safeBotLink}">Telegram 봇 열기</a>
-        <p class="fineprint">신청자의 Telegram 표시 이름·사용자명·chat ID는 승인 처리에만 사용됩니다. 표시 이름과 사용자명은 처리 즉시 삭제됩니다.</p>
+        <p class="fineprint">계정명과 Telegram 프로필 정보는 관리자 승인에 사용되며, 승인 또는 거절 시 신청 데이터베이스에서 삭제됩니다.</p>
       </aside>
     </div>
     <p class="notice">본 서비스는 공개된 KISA 보호나라 보안공지를 전달합니다. 승인은 구독 권한을 부여하는 절차이며, KISA의 공식 서비스나 보안 권고를 대체하지 않습니다.</p>

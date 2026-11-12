@@ -22,4 +22,15 @@ describe("onboarding page", () => {
       "not a valid Telegram bot username",
     );
   });
+
+  it("explains how to submit an account without exposing its configured prefix", () => {
+    const html = renderOnboardingPage({
+      ...environment("KisaNoticeBot"),
+      APPLICATION_ACCOUNT_PREFIX: "xyz-private-test",
+    });
+
+    expect(html).toContain("/apply 계정명");
+    expect(html).toContain("영문 2자_숫자 5자리");
+    expect(html).not.toContain("xyz-private-test");
+  });
 });

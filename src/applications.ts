@@ -24,6 +24,7 @@ export type ApplicationDecision =
   | "approved"
   | "rejected"
   | "full"
+  | "account-required"
   | "not-found"
   | "already-processed"
   | "unavailable";
@@ -45,12 +46,54 @@ function profileUsername(user: TelegramUser): string | null {
 export function parseApplicationCallback(
   value: string | undefined,
 ): { action: ApplicationAction; chatId: string } | null {
-  const match = /^application:(approve|reject):(\d{1,20})$/.exec(value ?? "");
+  const match = /^application:account:(approve|reject):(\d{1,20})$/.exec(value ?? "");
   if (!match) return null;
   return { action: match[1] as ApplicationAction, chatId: match[2] };
 }
 
-export async function submitApplication(env: Env, message: TelegramMessage): Promise<boolean> {
+export function parseSolutionAccount(args: string[], configuredPrefix: string): string | null {
+  const prefix = required(configuredPrefix, "APPLICATION_ACCOUNT_PREFIX").toLowerCase();
+  if (!/^[a-z]{2}$/.test(prefix)) {
+    throw new Error("APPLICATION_ACCOUNT_PREFIX must contain two ASCII letters.");
+  }
+  if (args.length !== 1) return null;
+  const account = args[0];
+  const match = /^([A-Za-z]{2})_[0-9]{5}$/.exec(account);
+  return match?.[1].toLowerCase() === prefix ? account.toLowerCase() : null;
+}
+
+export async function sendApplicationInstructions(env: Env, chatId: string): Promise<void> {
+  const now = new Date();
+  const cutoff = new Date(now.getTime() - 60_000).toISOString();
+  const result = await env.DB.prepare(
+    `INSERT INTO application_prompts (chat_id, prompted_at)
+     SELECT ?1, ?2
+     WHERE NOT EXISTS (SELECT 1 FROM subscribers WHERE chat_id = ?1)
+       AND NOT EXISTS (
+         SELECT 1 FROM applications
+         WHERE chat_id = ?1 AND (status <> 'pending' OR solution_account IS NOT NULL)
+       )
+       AND (SELECT COUNT(*) FROM application_prompts WHERE prompted_at > ?3) < 5
+     ON CONFLICT(chat_id) DO UPDATE SET prompted_at = excluded.prompted_at
+     WHERE application_prompts.prompted_at <= ?3`,
+  ).bind(chatId, now.toISOString(), cutoff).run();
+  if ((result.meta.changes ?? 0) !== 1) return;
+
+  await sendTelegramMessage(
+    env,
+    chatId,
+    "가입 자격 확인을 위해 사내 솔루션 계정명을 입력해 주세요.\n\n" +
+      "입력 방법: /apply 뒤에 공백을 한 칸 넣고 실제 계정명을 입력합니다.\n" +
+      "계정 형식: 영문 2자_숫자 5자리\n" +
+      "비밀번호나 인증코드는 보내지 마세요. 신청은 관리자 확인 후 승인됩니다.",
+  );
+}
+
+export async function submitApplication(
+  env: Env,
+  message: TelegramMessage,
+  account: string,
+): Promise<boolean> {
   if (message.chat.type !== "private" || !message.from) return false;
   const chatId = String(message.chat.id);
   const now = new Date();
@@ -58,18 +101,33 @@ export async function submitApplication(env: Env, message: TelegramMessage): Pro
   const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000).toISOString();
   const result = await env.DB.prepare(
     `INSERT INTO applications
-      (chat_id, display_name, username, status, requested_at, next_notify_at)
-     SELECT ?1, ?2, ?3, 'pending', ?4, ?4
+      (chat_id, display_name, username, status, requested_at, next_notify_at, solution_account)
+     SELECT ?1, ?2, ?3, 'pending', ?4, ?4, ?5
      WHERE NOT EXISTS (SELECT 1 FROM subscribers WHERE chat_id = ?1)
-       AND (SELECT COUNT(*) FROM applications WHERE status = 'pending') < ?5
-       AND (SELECT COUNT(*) FROM applications WHERE requested_at >= ?6) < ?7
-     ON CONFLICT(chat_id) DO NOTHING`,
+       AND (
+         SELECT COUNT(*) FROM applications WHERE status = 'pending' AND solution_account IS NOT NULL
+       ) < ?6
+       AND (
+         SELECT COUNT(*) FROM applications
+         WHERE requested_at >= ?7 AND (solution_account IS NOT NULL OR status <> 'pending')
+       ) < ?8
+     ON CONFLICT(chat_id) DO UPDATE SET
+       display_name = excluded.display_name,
+       username = excluded.username,
+       requested_at = excluded.requested_at,
+       next_notify_at = excluded.next_notify_at,
+       solution_account = excluded.solution_account,
+       admin_notified_at = NULL,
+       notify_attempts = 0,
+       last_error = NULL
+     WHERE applications.status = 'pending' AND applications.solution_account IS NULL`,
   )
     .bind(
       chatId,
       profileName(message.from),
       profileUsername(message.from),
       nowIso,
+      account,
       maxPendingApplications(env),
       oneHourAgo,
       maxApplicationsPerHour(env),
@@ -84,6 +142,7 @@ function adminApplicationMessage(application: PendingApplication): string {
     "[KISA 알림 봇 가입 신청]",
     `표시 이름: ${application.display_name}`,
     `Telegram 사용자명: ${username}`,
+    `사내 솔루션 계정명: ${application.solution_account}`,
     `Chat ID: ${application.chat_id}`,
     `신청 시각: ${application.requested_at}`,
   ].join("\n");
@@ -95,11 +154,11 @@ async function notifyAdmin(env: Env, application: PendingApplication): Promise<v
     [
       {
         text: "승인",
-        callback_data: `application:approve:${application.chat_id}`,
+        callback_data: `application:account:approve:${application.chat_id}`,
       },
       {
         text: "거절",
-        callback_data: `application:reject:${application.chat_id}`,
+        callback_data: `application:account:reject:${application.chat_id}`,
       },
     ],
   ]);
@@ -108,9 +167,10 @@ async function notifyAdmin(env: Env, application: PendingApplication): Promise<v
 export async function processPendingApplicationNotifications(env: Env): Promise<void> {
   const now = new Date().toISOString();
   const result = await env.DB.prepare(
-    `SELECT chat_id, display_name, username, requested_at, notify_attempts
+    `SELECT chat_id, display_name, username, solution_account, requested_at, notify_attempts
      FROM applications
      WHERE status = 'pending'
+       AND solution_account IS NOT NULL
        AND admin_notified_at IS NULL
        AND next_notify_at <= ?1
      ORDER BY requested_at
@@ -179,7 +239,7 @@ export async function decideApplication(
     const result = await env.DB.prepare(
       `UPDATE applications
        SET status = 'rejected', decided_at = ?1, decided_by = ?2,
-           display_name = '', username = NULL, last_error = NULL
+           display_name = '', username = NULL, solution_account = NULL, last_error = NULL
        WHERE chat_id = ?3 AND status = 'pending'`,
     )
       .bind(now, adminId, chatId)
@@ -200,9 +260,10 @@ export async function decideApplication(
     env.DB.prepare(
       `UPDATE applications
        SET status = 'approved', decided_at = ?1, decided_by = ?2,
-           display_name = '', username = NULL, last_error = NULL
+           display_name = '', username = NULL, solution_account = NULL, last_error = NULL
        WHERE chat_id = ?3
          AND status = 'pending'
+         AND solution_account IS NOT NULL
          AND (SELECT COUNT(*) FROM subscribers) < ?4`,
     ).bind(now, adminId, chatId, maxSubscribers(env)),
     env.DB.prepare(
@@ -214,12 +275,13 @@ export async function decideApplication(
   ]);
   if ((decision.meta.changes ?? 0) !== 1) {
     const existing = await env.DB.prepare(
-      "SELECT status FROM applications WHERE chat_id = ?1",
+      "SELECT status, solution_account IS NOT NULL AS has_account FROM applications WHERE chat_id = ?1",
     )
       .bind(chatId)
-      .first<{ status: string }>();
+      .first<{ status: string; has_account: number }>();
     if (!existing) return "not-found";
-    return existing.status === "pending" ? "full" : "already-processed";
+    if (existing.status !== "pending") return "already-processed";
+    return existing.has_account ? "full" : "account-required";
   }
 
   const notified = await notifyApplicant(env, chatId, action);
@@ -242,6 +304,7 @@ export function applicationDecisionLabel(decision: ApplicationDecision): string 
     approved: "승인 완료",
     rejected: "거절 완료",
     full: "구독 인원 초과",
+    "account-required": "사내 솔루션 계정명 입력 필요",
     "not-found": "신청 없음",
     "already-processed": "이미 처리됨",
     unavailable: "사용자에게 전송할 수 없음",
@@ -274,7 +337,7 @@ export async function handleApplicationCallback(
 
 export async function pendingApplicationCount(env: Env): Promise<number> {
   const row = await env.DB.prepare(
-    "SELECT COUNT(*) AS count FROM applications WHERE status = 'pending'",
+    "SELECT COUNT(*) AS count FROM applications WHERE status = 'pending' AND solution_account IS NOT NULL",
   ).first<{ count: number }>();
   return row?.count ?? 0;
 }

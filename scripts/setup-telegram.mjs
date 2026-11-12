@@ -35,7 +35,7 @@ await telegram("setMyCommands", {
 });
 await telegram("setMyDescription", {
   description:
-    "KISA 보호나라 보안공지를 Telegram 개인 메시지로 전달합니다. 가입 신청 후 관리자 승인이 필요합니다.",
+    "KISA 보호나라 보안공지를 Telegram 개인 메시지로 전달합니다. 가입하려면 /apply 뒤에 사내 솔루션 계정명을 입력하고 관리자 승인을 받아 주세요.",
 });
 await telegram("setMyShortDescription", {
   short_description: "관리자 승인형 KISA 보안공지 알림",

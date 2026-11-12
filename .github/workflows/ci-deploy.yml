@@ -82,4 +82,4 @@ jobs:
       - name: Setup reminder
         run: |
           echo "### Cloudflare deployment completed" >> "$GITHUB_STEP_SUMMARY"
-          echo "Add the three Worker secrets in the Cloudflare dashboard, configure the Telegram webhook, and only then set ENABLE_CRON=true." >> "$GITHUB_STEP_SUMMARY"
+          echo "For the first deployment, add the Worker secrets documented in README.md, configure the Telegram webhook, and then set ENABLE_CRON=true." >> "$GITHUB_STEP_SUMMARY"

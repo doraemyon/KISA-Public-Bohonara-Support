@@ -8,9 +8,11 @@ import {
   applicationDecisionLabel,
   decideApplication,
   handleApplicationCallback,
+  parseSolutionAccount,
   pendingApplicationCount,
   processPendingApplicationNotifications,
   reopenApplication,
+  sendApplicationInstructions,
   submitApplication,
 } from "./applications";
 import { broadcastBatchSize, maxSubscribers, required } from "./config";
@@ -238,7 +240,7 @@ async function handleAdminCommand(
       await env.DB.prepare(
         `UPDATE applications
          SET status = 'rejected', decided_at = ?1, decided_by = ?2,
-             display_name = '', username = NULL
+             display_name = '', username = NULL, solution_account = NULL
          WHERE chat_id = ?3`,
       )
         .bind(new Date().toISOString(), chatId, target)
@@ -268,10 +270,20 @@ async function handleCommand(env: Env, message: TelegramMessage): Promise<void> 
   if (command.name === "start") {
     const code = command.args[0];
     if (!code || code.toLowerCase() === "apply") {
-      await submitApplication(env, message);
+      await sendApplicationInstructions(env, chatId);
       return;
     }
     await subscribeWithCode(env, chatId, code);
+    return;
+  }
+
+  if (command.name === "apply") {
+    const account = parseSolutionAccount(command.args, env.APPLICATION_ACCOUNT_PREFIX);
+    if (account) {
+      await submitApplication(env, message, account);
+    } else {
+      await sendApplicationInstructions(env, chatId);
+    }
     return;
   }
 
@@ -492,6 +504,9 @@ async function cleanupExpiredData(env: Env): Promise<void> {
     env.DB.prepare(
       "DELETE FROM applications WHERE status = 'pending' AND requested_at < ?1",
     ).bind(thirtyDaysAgo),
+    env.DB.prepare(
+      "DELETE FROM application_prompts WHERE prompted_at < ?1",
+    ).bind(new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()),
   ]);
 }
 
