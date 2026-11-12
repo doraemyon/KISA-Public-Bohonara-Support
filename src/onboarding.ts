@@ -41,16 +41,19 @@ export function renderOnboardingPage(env: Env): string {
     body { min-width:320px; min-height:100vh; margin:0; background:var(--bg); color:var(--text); }
     a { color:inherit; }
     .topbar { border-bottom:1px solid var(--border); background:#010409; }
-    .topbar__inner { display:flex; width:min(100% - 32px,1040px); min-height:60px; margin:0 auto; align-items:center; justify-content:space-between; gap:16px; }
+    .topbar__inner, main { width:min(100% - 40px,840px); margin:0 auto; }
+    .topbar__inner { display:flex; min-height:60px; align-items:center; justify-content:space-between; gap:16px; }
     .brand { font-size:14px; font-weight:600; letter-spacing:-.01em; text-decoration:none; }
     .repo { color:var(--muted); font-size:12px; text-decoration:none; }
     .repo:hover { color:var(--blue); text-decoration:underline; text-underline-offset:3px; }
-    main { width:min(100% - 32px,1040px); margin:0 auto; padding:64px 0 72px; }
-    .layout { display:grid; grid-template-columns:minmax(0,1fr) 380px; align-items:center; gap:72px; }
+    main { padding:54px 0 56px; word-break:keep-all; }
+    .intro { text-align:center; }
+    .layout { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); align-items:center; gap:48px; margin-top:36px; }
+    .signup-steps, .card { width:min(100%,360px); justify-self:center; }
     .eyebrow { margin:0 0 12px; color:#58a6ff; font-size:13px; font-weight:600; }
-    h1 { max-width:650px; margin:0; font-size:clamp(34px,5.2vw,56px); line-height:1.12; letter-spacing:-.045em; }
-    .lead { max-width:620px; margin:20px 0 0; color:var(--muted); font-size:17px; line-height:1.7; }
-    .steps-title { margin:32px 0 12px; font-size:16px; }
+    h1 { margin:0; font-size:clamp(32px,5.2vw,52px); line-height:1.12; letter-spacing:-.045em; text-wrap:balance; }
+    .lead { max-width:600px; margin:16px auto 0; color:var(--muted); font-size:16px; line-height:1.7; text-wrap:pretty; }
+    .steps-title { margin:0 0 12px; font-size:16px; }
     .steps { display:grid; margin:0; padding:0; gap:16px; list-style:none; }
     .step { display:grid; grid-template-columns:28px minmax(0,1fr); align-items:start; gap:12px; }
     .step__number { display:grid; width:28px; height:28px; place-items:center; border:1px solid var(--border); border-radius:50%; background:var(--panel); color:var(--text); font-size:12px; font-weight:600; line-height:1; font-variant-numeric:tabular-nums; }
@@ -58,7 +61,7 @@ export function renderOnboardingPage(env: Env): string {
     .step__detail { margin:0; color:var(--muted); font-size:13px; line-height:1.65; }
     .step__detail strong { color:var(--text); }
     .step__command { display:inline-block; max-width:100%; margin:9px 0 7px; padding:7px 11px; border:1px solid var(--border); border-radius:6px; background:var(--panel); color:#e6edf3; font:600 14px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace; overflow-wrap:anywhere; }
-    .card { padding:24px; border:1px solid var(--border); border-radius:8px; background:var(--panel); box-shadow:0 16px 48px rgba(1,4,9,.35); }
+    .card { padding:24px; border:1px solid var(--border); border-radius:8px; background:var(--panel); box-shadow:0 16px 48px rgba(1,4,9,.35); text-align:center; }
     .qr { width:100%; aspect-ratio:1; overflow:hidden; border-radius:12px; background:#fff; }
     .qr svg { display:block; width:100%; height:100%; }
     .card h2 { margin:20px 0 6px; font-size:18px; letter-spacing:-.02em; }
@@ -66,12 +69,12 @@ export function renderOnboardingPage(env: Env): string {
     .button { display:flex; min-height:44px; padding:9px 16px; align-items:center; justify-content:center; border:1px solid rgba(240,246,252,.1); border-radius:6px; background:var(--green); color:#fff; font-size:14px; font-weight:600; text-decoration:none; }
     .button:hover { background:#2ea043; }
     .fineprint { margin:16px 0 0; color:var(--muted); font-size:11px; line-height:1.55; }
-    .notice { margin-top:52px; padding-top:20px; border-top:1px solid var(--border); color:var(--muted); font-size:12px; line-height:1.65; }
+    .notice { max-width:700px; margin:40px auto 0; padding-top:20px; border-top:1px solid var(--border); color:var(--muted); font-size:12px; line-height:1.65; text-align:center; }
     .notice p { margin:0; }
     .notice p + p { margin-top:8px; }
     .notice a { color:#58a6ff; text-underline-offset:2px; }
-    @media (max-width:820px) { main { padding-top:40px; } .layout { grid-template-columns:1fr; gap:40px; } .card { width:min(100%,420px); } }
-    @media (max-width:480px) { .topbar__inner,main { width:min(100% - 24px,1040px); } .topbar__inner { min-height:52px; } .repo { display:none; } main { padding:32px 0 48px; } h1 { font-size:34px; } .lead { font-size:15px; } .card { padding:16px; } }
+    @media (max-width:720px) { main { padding-top:40px; } .layout { grid-template-columns:1fr; gap:28px; margin-top:28px; } }
+    @media (max-width:480px) { .topbar__inner,main { width:calc(100% - 24px); } .topbar__inner { min-height:52px; } .repo { display:none; } main { padding:32px 0 40px; } .lead { font-size:15px; } .card { padding:16px; } }
   </style>
 </head>
 <body>
@@ -82,12 +85,14 @@ export function renderOnboardingPage(env: Env): string {
     </div>
   </header>
   <main>
+    <header class="intro">
+      <p class="eyebrow">Telegram notification</p>
+      <h1>KISA 보안공지를 놓치지 마세요.</h1>
+      <p class="lead">보호나라에 새 보안공지가 등록되면 Telegram 개인 메시지로 전달합니다. 가입 신청 후 관리자 승인이 완료되면 별도 설정 없이 알림이 시작됩니다.</p>
+    </header>
     <div class="layout">
-      <section>
-        <p class="eyebrow">Telegram notification</p>
-        <h1>KISA 보안공지를<br>놓치지 마세요.</h1>
-        <p class="lead">보호나라에 새 보안공지가 등록되면 Telegram 개인 메시지로 전달합니다. 가입 신청 후 관리자 승인이 완료되면 별도 설정 없이 알림이 시작됩니다.</p>
-        <h2 class="steps-title">가입 방법</h2>
+      <section class="signup-steps" aria-labelledby="signup-steps-title">
+        <h2 class="steps-title" id="signup-steps-title">가입 방법</h2>
         <ol class="steps" role="list">
           <li class="step">
             <span class="step__number" aria-hidden="true">1</span>
@@ -124,7 +129,7 @@ export function renderOnboardingPage(env: Env): string {
     </div>
     <footer class="notice" aria-label="서비스 및 라이선스 안내">
       <p>본 서비스는 수익 목적 없이 운영하는 비상업적 프로젝트입니다. 한국인터넷진흥원(KISA)이 제공하는 <a href="https://www.boho.or.kr/kr/rss.do?bbsId=B0000133">보호나라 보안공지 RSS</a>를 활용해 새 공지를 Telegram으로 전달합니다. KISA와 별개로 운영되는 독립적인 비공식 알리미입니다.</p>
-      <p>프로젝트 소스 코드는 <a href="https://github.com/doraemyon/KISA-Public-Bohonara-Support/blob/main/LICENSE">MIT 라이선스</a>로 공개되어 있습니다. 누구나 저장소를 <a href="https://github.com/doraemyon/KISA-Public-Bohonara-Support/fork">포크</a>하고 라이선스 조건에 따라 소스를 수정·재배포할 수 있습니다.</p>
+      <p>© 2026 · <a href="https://github.com/doraemyon/KISA-Public-Bohonara-Support/blob/main/LICENSE">MIT License</a></p>
     </footer>
   </main>
 </body>
