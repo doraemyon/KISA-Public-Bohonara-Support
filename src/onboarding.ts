@@ -1,5 +1,6 @@
 import { APPLICATION_COMMAND } from "./access";
 import { NOTICE_ICON_PATH, required } from "./config";
+import { renderSiteHeader, SITE_SHELL_STYLESHEET } from "./site-header";
 import { renderTelegramQr } from "./telegram-qr";
 import type { Env } from "./types";
 
@@ -36,18 +37,11 @@ export function renderOnboardingPage(env: Env): string {
   <meta name="description" content="KISA 보호나라 보안공지를 Telegram으로 전하는 독립적인 비공식 알리미">
   <title>보호나라 보안공지 알림 봇 구독</title>
   <link rel="icon" type="image/png" href="${NOTICE_ICON_PATH}">
+  ${SITE_SHELL_STYLESHEET}
   <style>
-    :root { color-scheme: dark; font-family: -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR","Apple SD Gothic Neo","Malgun Gothic",sans-serif; --bg:#0d1117; --panel:#161b22; --panel-2:#21262d; --border:#30363d; --text:#f0f6fc; --muted:#8b949e; --blue:#2f81f7; --green:#238636; }
-    * { box-sizing: border-box; }
-    body { min-width:320px; min-height:100vh; margin:0; background:var(--bg); color:var(--text); }
+    :root { --panel:#161b22; --border:#30363d; --text:#f0f6fc; --muted:#8b949e; --green:#238636; }
     a { color:inherit; }
-    .topbar { border-bottom:1px solid var(--border); background:#010409; }
-    .topbar__inner, main { width:min(100% - 40px,840px); margin:0 auto; }
-    .topbar__inner { display:flex; min-height:60px; align-items:center; justify-content:space-between; gap:16px; }
-    .brand { display:inline-flex; align-items:center; gap:8px; font-size:14px; font-weight:600; letter-spacing:-.01em; text-decoration:none; }
-    .archive-link { color:var(--muted); font-size:12px; text-decoration:none; }
-    .archive-link:hover { color:var(--blue); text-decoration:underline; text-underline-offset:3px; }
-    main { padding:54px 0 56px; word-break:keep-all; }
+    main { word-break:keep-all; }
     .intro { text-align:center; }
     .layout { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); align-items:center; gap:48px; margin-top:36px; }
     .signup-steps, .card { width:min(100%,360px); justify-self:center; }
@@ -74,18 +68,13 @@ export function renderOnboardingPage(env: Env): string {
     .notice p { margin:0; }
     .notice p + p { margin-top:8px; }
     .notice a { color:#58a6ff; text-underline-offset:2px; }
-    @media (max-width:720px) { main { padding-top:40px; } .layout { grid-template-columns:1fr; gap:28px; margin-top:28px; } }
-    @media (max-width:480px) { .topbar__inner,main { width:calc(100% - 24px); } .topbar__inner { min-height:52px; } main { padding:32px 0 40px; } .lead { font-size:15px; } .card { padding:16px; } }
+    @media (max-width:720px) { .layout { grid-template-columns:1fr; gap:28px; margin-top:28px; } }
+    @media (max-width:480px) { .lead { font-size:15px; } .card { padding:16px; } }
   </style>
 </head>
 <body>
-  <header class="topbar">
-    <div class="topbar__inner">
-      <a class="brand" href="/"><img src="${NOTICE_ICON_PATH}" width="20" height="20" alt="">보안공지 알리미</a>
-      <a class="archive-link" href="/notices/">공지 목록</a>
-    </div>
-  </header>
-  <main>
+  ${renderSiteHeader("보안공지 알리미", true)}
+  <main class="public-content">
     <header class="intro">
       <p class="eyebrow">비공식 Telegram 알림 봇 서비스</p>
       <h1>보호나라 보안공지를 놓치지 마세요.</h1>

@@ -1,5 +1,6 @@
 import { NOTICE_ICON_PATH } from "./config";
 import { noticeIdFromLink } from "./rss";
+import { renderSiteHeader, SITE_SHELL_STYLESHEET } from "./site-header";
 import type { Env, InlineKeyboard } from "./types";
 
 type Language = "ko" | "en";
@@ -107,7 +108,16 @@ function mirrorHtml(response: Response, source: URL, base: URL, language?: Langu
   const rewrite = new HTMLRewriter()
     .on("base", { element(element) { element.remove(); } })
     .on("meta[http-equiv]", { element(element) { element.remove(); } })
-    .on(".site-name", { element(element) { element.setInnerContent(archiveLabel(language)); } })
+    .on("head", { element(element) { element.append(SITE_SHELL_STYLESHEET, { html: true }); } })
+    .on("header.site-header", {
+      element(element) { element.replace(renderSiteHeader(archiveLabel(language)), { html: true }); },
+    })
+    .on("main.page-shell", {
+      element(element) {
+        const classes = element.getAttribute("class");
+        element.setAttribute("class", `${classes} public-content`);
+      },
+    })
     .on("a[href]", {
       element(element) {
         const original = element.getAttribute("href") ?? "";
@@ -137,11 +147,6 @@ function mirrorHtml(response: Response, source: URL, base: URL, language?: Langu
         element.remove();
       },
     })
-    .on(".site-logo", {
-      element(element) {
-        element.setInnerContent(`<img src="${NOTICE_ICON_PATH}" alt="">`, { html: true });
-      },
-    })
     .on("script", {
       element(element) {
         if (archiveLink(element.getAttribute("src") ?? "", source, base) === COPY_PATH) {
@@ -165,19 +170,16 @@ function pendingNotice(id: string, language: Language, status: number): Response
 <html lang="${language}"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${title} · ${archiveLabel(language)}</title>
-<link rel="icon" href="${NOTICE_ICON_PATH}"><link rel="stylesheet" href="${STYLE_PATH}">
+<link rel="icon" href="${NOTICE_ICON_PATH}"><link rel="stylesheet" href="${STYLE_PATH}">${SITE_SHELL_STYLESHEET}
 <script src="${STATUS_PATH}" defer></script></head><body>
-<header class="site-header"><div class="site-header__inner">
-<a class="site-brand" href="/notices/"><span class="site-logo"><img src="${NOTICE_ICON_PATH}" alt=""></span><span class="site-name">${archiveLabel(language)}</span></a>
-</div></header>
-<main class="page-shell"><section class="pending-card">
+${renderSiteHeader(archiveLabel(language))}
+<main class="page-shell public-content"><section class="pending-card">
 <div class="pending-card__mark" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1Zm0 1.5a5.5 5.5 0 1 1 0 11 5.5 5.5 0 0 1 0-11Zm-.75 2.25h1.5v3l2 1.5-.9 1.2-2.6-1.95Z"/></svg></div>
 <p class="pending-card__eyebrow">Security notice</p><h1>${title}</h1>
 <p class="pending-card__description">${description}</p>
 <div class="pending-card__actions">
 <button class="button button--primary" id="retry-button" type="button">${english ? "Check again" : "다시 확인"}</button>
 <a class="button" href="${original}">${english ? "KISA source" : "KISA 원문"}</a>
-<a class="button" href="/notices/">${english ? "Notice list" : "공지 목록"}</a>
 </div><p class="pending-card__status" id="check-status" aria-live="polite"></p>
 </section></main></body></html>`, { status, headers: archiveHeaders("text/html") });
 }
@@ -205,6 +207,9 @@ async function pairIsPublished(base: URL, id: string, language: Language, versio
 
 export async function serveNoticePage(url: URL, env: Env): Promise<Response | null> {
   const path = url.pathname;
+  if (path === "/notice" || path === "/notice/") {
+    return new Response(null, { status: 308, headers: { Location: "/notices/" + url.search } });
+  }
   if (path === "/notices" || /^\/notices\/\d{1,20}\/(ko|en)$/.test(path)) {
     return new Response(null, { status: 308, headers: { Location: path + "/" } });
   }
