@@ -32,6 +32,8 @@ describe("public notice archive", () => {
     expect(archiveLink("./notice.txt", page, archive)).toBe("/notices/72298/en/notice.txt");
     expect(archiveLink("../../../assets/app.js", page, archive)).toBe("/assets/app.js");
     expect(archiveLink(original, page, archive)).toBe(original);
+    const attachment = original + "#:~:text=Guide.pdf";
+    expect(archiveLink(attachment, page, archive)).toBe(attachment);
     expect(archiveLink("https://github.com/example/formatter", page, archive)).toBeNull();
     expect(archiveLink("./metadata.json", page, archive)).toBeNull();
   });

@@ -2,6 +2,7 @@ import { XMLParser } from "fast-xml-parser";
 
 import type { Notice } from "./types";
 
+const KISA_BOARD_URL = "https://www.boho.or.kr/kr/bbs/list.do?bbsId=B0000133&menuNo=205020";
 const NOTICE_ID_PATTERN = /(?:[?&])nttId=(\d{1,20})(?:&|$)/;
 
 function asArray<T>(value: T | T[] | undefined): T[] {
@@ -23,6 +24,38 @@ export function noticeIdFromLink(link: string): string {
   const match = NOTICE_ID_PATTERN.exec(link);
   if (!match) throw new Error("KISA notice URL has no numeric nttId.");
   return match[1];
+}
+
+export async function fetchKisaAttachmentIds(): Promise<Set<string>> {
+  const ids = new Set<string>();
+  let noticeId = "";
+  try {
+    const response = await fetch(KISA_BOARD_URL, {
+      redirect: "error",
+      signal: AbortSignal.timeout(2500),
+    });
+    if (!response.ok) {
+      await response.body?.cancel();
+      return ids;
+    }
+    const parsed = new HTMLRewriter()
+      .on("tr", { element() { noticeId = ""; } })
+      .on("td.sbj a[href]", {
+        element(element) {
+          noticeId = NOTICE_ID_PATTERN.exec(element.getAttribute("href") ?? "")?.[1] ?? "";
+        },
+      })
+      .on('td.attach img[alt="첨부파일"]', {
+        element() {
+          if (noticeId) ids.add(noticeId);
+        },
+      })
+      .transform(response);
+    await parsed.body?.pipeTo(new WritableStream());
+  } catch {
+    // The optional indicator must never prevent the standard alert.
+  }
+  return ids;
 }
 
 export function parseKisaRss(xml: string): Notice[] {

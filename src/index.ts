@@ -19,7 +19,7 @@ import {
 import { broadcastBatchSize, maxSubscribers, publicSiteUrl, required } from "./config";
 import { noticeKeyboard, serveNoticePage } from "./notice-pages";
 import { renderOnboardingPage } from "./onboarding";
-import { parseKisaRss } from "./rss";
+import { fetchKisaAttachmentIds, parseKisaRss } from "./rss";
 import {
   isPermanentRecipientError,
   sendTelegramMessage,
@@ -405,11 +405,12 @@ async function seedOrQueueNotices(env: Env, notices: Notice[]): Promise<void> {
   }
 }
 
-async function deliverOne(env: Env, delivery: PendingDelivery): Promise<void> {
+async function deliverOne(env: Env, delivery: PendingDelivery, hasAttachment: boolean): Promise<void> {
   const publishedLine = delivery.published_at
     ? `\n게시: ${delivery.published_at}`
     : "";
-  const message = `[KISA 보안공지]\n${delivery.title}${publishedLine}`;
+  const clip = hasAttachment ? " 📎" : "";
+  const message = `[KISA 보안공지]\n${delivery.title}${clip}${publishedLine}`;
   try {
     await sendTelegramMessage(
       env,
@@ -470,7 +471,11 @@ async function processPendingDeliveries(env: Env): Promise<void> {
   )
     .bind(new Date().toISOString(), broadcastBatchSize(env))
     .all<PendingDelivery>();
-  await Promise.all(result.results.map((delivery) => deliverOne(env, delivery)));
+  if (!result.results.length) return;
+  const attachmentIds = await fetchKisaAttachmentIds();
+  await Promise.all(
+    result.results.map((delivery) => deliverOne(env, delivery, attachmentIds.has(delivery.notice_id))),
+  );
 }
 
 async function cleanupExpiredData(env: Env): Promise<void> {

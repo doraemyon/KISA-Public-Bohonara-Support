@@ -84,7 +84,9 @@ export function archiveLink(value: string, source: URL, base: URL): string | nul
       if (path === "/" || path === "/index.html") return "/notices/";
       if (DOCUMENT_PATH.test(path) || path === STYLE_PATH || path === COPY_PATH) return path;
     }
-    if (target.origin === KISA_ORIGIN && target.pathname.startsWith("/kr/")) return target.href;
+    if (target.origin === KISA_ORIGIN && !target.username && !target.password) {
+      if (target.pathname.startsWith("/kr/")) return target.href;
+    }
   } catch {
     // Malformed URLs are omitted from the mirrored page.
   }
