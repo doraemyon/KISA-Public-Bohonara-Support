@@ -264,9 +264,9 @@ npm run check
 공지 목록, 국문·영문 페이지와 텍스트 다운로드는 기존 주소에서 Worker가 D1 데이터를 읽어 제공합니다.
 `site/notices/`는 검증을 마친 문서와 재게시용 스냅숏을 보관합니다. Python 포맷터가 기존 번역 경로와 검증 규칙을 적용하고, 국문·영문 HTML과 다운로드 파일을 한 번에 D1에 저장합니다. 게시가 끝날 때까지 기존 Telegram 링크에는 준비 화면이 표시됩니다.
 
-- **새 공지 감지 즉시 시작:** 이 저장소에만 접근 가능한 GitHub fine-grained PAT에 **Actions: Read and write**를 부여하고 Worker Secret `NOTICE_WORKFLOW_TOKEN`에 등록합니다. 예약 복구도 별도로 동작합니다.
+- **새 공지 감지 즉시 시작:** 이 저장소에만 접근 가능한 GitHub fine-grained PAT에 **Actions: Read and write**를 부여하고 Worker Secret `NOTICE_WORKFLOW_TOKEN`에 등록합니다. 토큰이 없거나 호출이 실패하면 5분 간격으로 예약된 RSS 확인이 이어받습니다. GitHub 예약 실행은 지연될 수 있습니다.
 - **번역 설정:** 공개 봇 저장소의 Actions Secrets에 기존 Gemini 키를 `PUBLIC_NOTICE_GEMINI_API_KEY`로 등록합니다. 모델을 지정했다면 Actions Variable `PUBLIC_NOTICE_GEMINI_MODEL`에도 같은 모델명을 넣습니다. Workers AI를 사용 중이면 기존 계정 ID와 API 토큰을 각각 `PUBLIC_NOTICE_TRANSLATION_ACCOUNT_ID`와 `PUBLIC_NOTICE_TRANSLATION_API_TOKEN`으로 등록합니다. MyMemory 연락 이메일은 `PUBLIC_NOTICE_MYMEMORY_CONTACT_EMAIL`을 사용합니다.
 - **문서 게시 인증:** `Publish KISA notices to D1` 워크플로는 GitHub Actions의 단기 OIDC 토큰을 사용합니다. D1 게시를 위한 장기 Cloudflare 토큰을 추가로 저장할 필요가 없습니다. Worker 변수 `NOTICE_WORKFLOW_REPOSITORY`는 게시를 허용할 GitHub 저장소 이름입니다. CI용 Wrangler 설정을 만들 때 `github.repository`로 지정합니다.
-- **복구:** 예약 실행은 KISA 게시판 최근 14일을 대조하고, 매일 한 번 및 수동 전체 실행은 최근 3개월을 확인합니다. 번역 실패는 큐에 다시 넣고, D1에 덜 올라간 문서는 다음 실행에서 다시 게시합니다.
+- **복구:** 별도 예약 실행은 30분마다 KISA 게시판 최근 14일을 대조하고, 매일 한 번 및 수동 전체 실행은 최근 3개월을 확인합니다. 번역 실패는 큐에 다시 넣고, D1에 덜 올라간 문서는 다음 실행에서 다시 게시합니다.
 
 `python -m unittest discover -s tests`로 번역 및 서식 검사를, `npm run check`로 Worker 검사를 실행합니다.

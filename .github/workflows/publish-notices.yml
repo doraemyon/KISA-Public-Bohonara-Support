@@ -16,6 +16,7 @@ on:
         description: KISA notice title
         type: string
   schedule:
+    - cron: "3-58/5 * * * *"
     - cron: "11,41 * * * *"
     - cron: "17 17 * * *"
 
@@ -54,10 +55,13 @@ jobs:
         if: github.event_name != 'push' && env.NOTICE_URL == ''
         env:
           FULL_SCAN: ${{ github.event_name == 'workflow_dispatch' || github.event.schedule == '17 17 * * *' }}
+          RSS_ONLY: ${{ github.event.schedule == '3-58/5 * * * *' }}
         run: |
           args=(--discover-only)
           if [[ "$FULL_SCAN" == "true" ]]; then
             args+=(--full-scan)
+          elif [[ "$RSS_ONLY" == "true" ]]; then
+            args+=(--rss-only)
           fi
           python3 scripts/recover_missing_notices.py "${args[@]}"
 

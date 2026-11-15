@@ -75,16 +75,19 @@ def is_complete(notice_id: str) -> bool:
     )
 
 
-def reconcile(full_scan: bool) -> list[tuple[str, str, str]]:
-    today = datetime.now(KOREA).date()
-    since = three_months_before(today) if full_scan else today - timedelta(days=14)
-    try:
-        catalog = notice_catalog.official_notices(since, today)
-        notice_catalog.update_board_numbers(catalog)
-        discovered = [entry.request() for entry in catalog]
-    except (OSError, RuntimeError, ValueError) as error:
-        print(f"::warning::Official KISA list scan failed: {error}. Trying RSS and the saved queue.")
+def reconcile(full_scan: bool, *, rss_only: bool = False) -> list[tuple[str, str, str]]:
+    if rss_only:
         discovered = recent_notices()
+    else:
+        today = datetime.now(KOREA).date()
+        since = three_months_before(today) if full_scan else today - timedelta(days=14)
+        try:
+            catalog = notice_catalog.official_notices(since, today)
+            notice_catalog.update_board_numbers(catalog)
+            discovered = [entry.request() for entry in catalog]
+        except (OSError, RuntimeError, ValueError) as error:
+            print(f"::warning::Official KISA list scan failed: {error}. Trying RSS and the saved queue.")
+            discovered = recent_notices()
 
     queued = recovery_queue.load_queue()
     previously_queued = {notice[0] for notice in queued}
@@ -100,9 +103,9 @@ def reconcile(full_scan: bool) -> list[tuple[str, str, str]]:
 
 def main(
     *, full_scan: bool = False, limit: int = 12,
-    discover_only: bool = False, queued_only: bool = False,
+    discover_only: bool = False, queued_only: bool = False, rss_only: bool = False,
 ) -> None:
-    missing = recovery_queue.load_queue() if queued_only else reconcile(full_scan)
+    missing = recovery_queue.load_queue() if queued_only else reconcile(full_scan, rss_only=rss_only)
     if discover_only:
         recovery_queue.write_output("pending", str(len(missing)))
         print(f"Discovered {len(missing)} pending KISA notice(s).")
@@ -150,7 +153,9 @@ def main(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--full-scan", action="store_true")
+    scope = parser.add_mutually_exclusive_group()
+    scope.add_argument("--full-scan", action="store_true")
+    scope.add_argument("--rss-only", action="store_true")
     parser.add_argument("--limit", type=int, choices=range(1, 121), default=12, metavar="1..120")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--discover-only", action="store_true")
@@ -158,5 +163,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
     main(
         full_scan=args.full_scan, limit=args.limit,
-        discover_only=args.discover_only, queued_only=args.queued_only,
+        discover_only=args.discover_only, queued_only=args.queued_only, rss_only=args.rss_only,
     )
