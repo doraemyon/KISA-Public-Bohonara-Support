@@ -1,5 +1,5 @@
-import { httpsUrl, NOTICE_ICON_PATH, publicSiteUrl } from "./config";
-import { findNoticeDocument, findNoticeIndex, hasNoticeDocument, hasNoticeIndex } from "./notice-storage";
+import { NOTICE_ICON_PATH, publicSiteUrl } from "./config";
+import { findNoticeDocument, findNoticeIndex, hasNoticeDocument } from "./notice-storage";
 import { noticeIdFromLink } from "./rss";
 import { renderSiteHeader, SITE_SHELL_STYLESHEET } from "./site-header";
 import type { Env, InlineKeyboard } from "./types";
@@ -98,7 +98,7 @@ function archiveLabel(language: Language = "ko"): string {
   return language === "en" ? "Unofficial Notice Viewer" : "비공식 보호나라 보안공지";
 }
 
-function mirrorHtml(response: Response, source: URL, base: URL, language?: Language): Response {
+function renderArchiveHtml(response: Response, source: URL, base: URL, language?: Language): Response {
   const rewrite = new HTMLRewriter()
     .on("base", { element(element) { element.remove(); } })
     .on("meta[http-equiv]", { element(element) { element.remove(); } })
@@ -184,43 +184,6 @@ ${renderSiteHeader(archiveLabel(language), "/notice")}
 </section></main></body></html>`, { status, headers: archiveHeaders("text/html") });
 }
 
-async function archiveFetch(base: URL, path: string, version: string, method = "GET"): Promise<Response> {
-  const target = new URL(path.slice(1), base);
-  if (version) target.searchParams.set("v", version);
-  return fetch(target, { method, redirect: "manual", signal: AbortSignal.timeout(8000) });
-}
-
-async function publicationStatus(
-  base: URL, id: string, version: string, requestedPath?: string,
-): Promise<200 | 404 | 503> {
-  const files = ["ko/", "ko/notice.txt", "en/", "en/notice.txt"]
-    .map(file => ({ path: `/notices/${id}/${file}`, type: file.endsWith(".txt") ? "text/plain" : "text/html" }))
-    .filter(file => file.path !== requestedPath);
-  const [metadata, ...documents] = await Promise.all([
-    archiveFetch(base, `/notices/${id}/metadata.json`, version),
-    ...files.map(file => archiveFetch(base, file.path, version, "HEAD")),
-  ]);
-  const responses = [metadata, ...documents];
-  if (responses.some(response => !response.ok && response.status !== 404)) {
-    await metadata.body?.cancel();
-    return 503;
-  }
-  if (responses.some(response => response.status === 404)) {
-    await metadata.body?.cancel();
-    return 404;
-  }
-  if (documents.some((response, index) =>
-    response.headers.get("Content-Type")?.split(";")[0].toLowerCase() !== files[index].type,
-  )) {
-    await metadata.body?.cancel();
-    return 503;
-  }
-  const record = await metadata.json<{ notice_id?: string; translation_status?: string }>();
-  // Older published pairs predate the explicit translation_status field.
-  if (record.notice_id !== id) return 503;
-  return (record.translation_status ?? "complete") === "complete" ? 200 : 404;
-}
-
 function publicationResponse(status: 200 | 404 | 503): Response {
   const state = status === 200 ? "ready" : status === 404 ? "pending" : "unavailable";
   return new Response(JSON.stringify({ state }), {
@@ -245,8 +208,7 @@ export async function serveNoticePage(url: URL, env: Env): Promise<Response | nu
   const document = DOCUMENT_PATH.exec(path);
   const statusId = PUBLICATION_PATH.exec(path)?.[1];
   const index = path === "/notices/";
-  const asset = path === STYLE_PATH || path === COPY_PATH;
-  if (!document && !statusId && !index && !asset) return null;
+  if (!document && !statusId && !index) return null;
 
   const id = document?.[1];
   const language = document?.[2] as Language | undefined;
@@ -256,67 +218,22 @@ export async function serveNoticePage(url: URL, env: Env): Promise<Response | nu
     : new Response(status === 404 ? "문서를 찾을 수 없습니다." : "공지 문서를 확인하는 중입니다. 잠시 후 다시 시도해 주세요.", {
         status, headers: archiveHeaders("text/plain"),
       });
-  if (env.NOTICE_WORKFLOW_REPOSITORY && (index || id || statusId)) {
-    try {
-      const body = index
-        ? await findNoticeIndex(env.DB)
-        : id && language
-          ? await findNoticeDocument(env.DB, id, language, text)
-          : null;
-      if (body !== null) {
-        const headers = archiveHeaders(text ? "text/plain" : "text/html");
-        headers.set("X-Notice-Archive", "d1");
-        const response = new Response(body, { headers });
-        const base = new URL("/", url);
-        return text ? response : mirrorHtml(response, new URL(index ? "/" : path, base), base, language);
-      }
-      if (statusId && await hasNoticeDocument(env.DB, statusId)) return publicationResponse(200);
-      // Before the initial import finishes, keep the legacy archive available.
-      if (!index && await hasNoticeIndex(env.DB)) {
-        return statusId ? publicationResponse(404) : unavailable(404);
-      }
-    } catch (error) {
-      console.error("Could not read the notice archive", error);
-      if (!env.NOTICE_ARCHIVE_ORIGIN) return statusId ? publicationResponse(503) : unavailable(503);
-    }
-  }
 
-  const base = httpsUrl(env.NOTICE_ARCHIVE_ORIGIN);
-  if (!base || base.origin === url.origin) {
-    return statusId ? publicationResponse(503) : unavailable(503);
-  }
-  base.pathname = base.pathname.replace(/\/*$/, "/");
-
-  const upstreamPath = index ? "/" : path;
-  const checking = Boolean(statusId) || url.searchParams.has("check") || url.searchParams.has("published");
-  const version = checking ? String(Math.floor(Date.now() / 5000)) : "";
   try {
-    if (statusId) return publicationResponse(await publicationStatus(base, statusId, version));
-    const response = await archiveFetch(base, upstreamPath, version);
-    if (!response.ok) {
-      await response.body?.cancel();
-      return unavailable(response.status === 404 ? 404 : 503);
+    if (statusId) {
+      return publicationResponse(await hasNoticeDocument(env.DB, statusId) ? 200 : 404);
     }
-    if (id) {
-      const status = await publicationStatus(base, id, version, path);
-      if (status !== 200) {
-        await response.body?.cancel();
-        return unavailable(status);
-      }
-    }
-    const type = text ? "text/plain" : path === STYLE_PATH ? "text/css" : path === COPY_PATH ? "text/javascript" : "text/html";
-    const upstreamType = response.headers.get("Content-Type")?.split(";")[0].toLowerCase();
-    if (upstreamType !== type && !(type === "text/javascript" && upstreamType === "application/javascript")) {
-      await response.body?.cancel();
-      return unavailable(503);
-    }
-    const result = new Response(response.body, {
-      headers: archiveHeaders(type, checking ? "no-store" : "public, max-age=30"),
-    });
-    return type === "text/html"
-      ? mirrorHtml(result, new URL(upstreamPath.slice(1), base), base, language)
-      : result;
-  } catch {
+    const body = index
+      ? await findNoticeIndex(env.DB)
+      : await findNoticeDocument(env.DB, document![1], language!, text);
+    if (body === null) return unavailable(index ? 503 : 404);
+    const headers = archiveHeaders(text ? "text/plain" : "text/html");
+    headers.set("X-Notice-Archive", "d1");
+    const response = new Response(body, { headers });
+    const base = new URL("/", url);
+    return text ? response : renderArchiveHtml(response, new URL(index ? "/" : path, base), base, language);
+  } catch (error) {
+    console.error("Could not read the notice archive", error);
     return statusId ? publicationResponse(503) : unavailable(503);
   }
 }

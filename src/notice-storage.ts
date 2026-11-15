@@ -15,10 +15,6 @@ export async function findNoticeIndex(db: D1Database): Promise<string | null> {
   return row?.html ?? null;
 }
 
-export async function hasNoticeIndex(db: D1Database): Promise<boolean> {
-  return Boolean(await db.prepare("SELECT 1 FROM notice_archive_index WHERE id = 1").first());
-}
-
 export async function hasNoticeDocument(db: D1Database, noticeId: string): Promise<boolean> {
   return Boolean(await db.prepare(
     "SELECT 1 FROM notice_documents WHERE notice_id = ?1",

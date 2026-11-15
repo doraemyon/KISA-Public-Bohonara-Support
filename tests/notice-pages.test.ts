@@ -7,7 +7,6 @@ const archive = new URL("https://example.github.io/formatter/");
 const publicSite = "https://alerts.example.test";
 const original = "https://www.boho.or.kr/kr/bbs/view.do?bbsId=B0000133&nttId=72298";
 const env = {
-  NOTICE_ARCHIVE_ORIGIN: archive.href,
   PUBLIC_BASE_URL: publicSite,
 } as Env;
 
@@ -41,8 +40,7 @@ describe("public notice archive", () => {
   it("serves downloads and readiness from D1 without requesting the old archive", async () => {
     const byId = vi.fn(async (id: string) => id === "72298" ? { body: "UTF-8 영어 문서" } : null);
     const db = {
-      prepare(statement: string) {
-        if (statement.includes("notice_archive_index")) return { first: async () => ({ ready: 1 }) };
+      prepare() {
         return { bind: (id: string) => ({ first: () => byId(id) }) };
       },
     } as unknown as D1Database;
@@ -60,54 +58,30 @@ describe("public notice archive", () => {
     expect(network).not.toHaveBeenCalled();
   });
 
-  it("does not publish a single language when its counterpart is missing", async () => {
-    vi.stubGlobal("fetch", vi.fn((url: URL) => {
-      if (url.pathname.endsWith("/metadata.json")) {
-        return Response.json({ notice_id: "72298", translation_status: "complete" });
-      }
-      if (url.pathname.endsWith("/ko/")) return new Response("<h1>국문</h1>");
-      return new Response("missing", { status: 404 });
-    }));
-    const response = await serveNoticePage(new URL("/notices/72298/ko/?check=1", publicSite), env);
-    expect(response?.status).toBe(404);
-    expect(response?.headers.get("Cache-Control")).toBe("no-store");
-    const html = await response?.text();
-    expect(html).toContain("국문·영문 문서 게시가 완료되면");
-    expect(html).not.toContain("github.io");
-  });
-
-  it("does not forward upstream redirects or expose archive internals", async () => {
-    const fetchArchive = vi.fn(() =>
-      new Response(null, { status: 302, headers: { Location: archive.href } }),
-    );
-    vi.stubGlobal("fetch", fetchArchive);
-    const response = await serveNoticePage(new URL("/notices/72298/en/", publicSite), env);
-    expect(response?.status).toBe(503);
-    expect(response?.headers.get("Location")).toBeNull();
-    expect(await response?.text()).not.toContain("github.io");
-    expect(await serveNoticePage(new URL("/notices/72298/metadata.json", publicSite), env)).toBeNull();
-    expect(fetchArchive).toHaveBeenCalledTimes(1);
-  });
-
-  it("distinguishes a complete publication, a missing download, and an upstream outage", async () => {
-    let downloadStatus = 200;
-    vi.stubGlobal("fetch", vi.fn((url: URL) => {
-      if (url.pathname.endsWith("/metadata.json")) return Response.json({ notice_id: "72298" });
-      const download = url.pathname.endsWith(".txt");
-      const status = url.pathname.endsWith("/en/notice.txt") ? downloadStatus : 200;
-      return new Response(null, {
-        status, headers: { "Content-Type": download ? "text/plain" : "text/html" },
-      });
-    }));
-    const url = new URL("/notices/72298/status.json", publicSite);
-    for (const [upstream, expectedStatus, state] of [
-      [200, 200, "ready"], [404, 404, "pending"], [503, 503, "unavailable"],
+  it("distinguishes a pending notice from a D1 outage without leaking its details", async () => {
+    let databaseAvailable = true;
+    const db = {
+      prepare() {
+        return { bind: () => ({ first: async () => {
+          if (!databaseAvailable) throw new Error("private database details");
+          return null;
+        } }) };
+      },
+    } as unknown as D1Database;
+    const url = new URL("/notices/72298/ko/?check=1", publicSite);
+    for (const [available, expectedStatus, state] of [
+      [true, 404, "pending"], [false, 503, "unavailable"],
     ] as const) {
-      downloadStatus = upstream;
-      const response = await serveNoticePage(url, env);
+      databaseAvailable = available;
+      const response = await serveNoticePage(url, { ...env, DB: db });
       expect(response?.status).toBe(expectedStatus);
-      expect(await response?.json()).toEqual({ state });
       expect(response?.headers.get("Cache-Control")).toBe("no-store");
+      const html = await response?.text();
+      expect(html).toContain("국문·영문 문서 게시가 완료되면");
+      expect(html).not.toContain("private database details");
+      const status = await serveNoticePage(new URL("../status.json", url), { ...env, DB: db });
+      expect(await status?.json()).toEqual({ state });
     }
+    expect(await serveNoticePage(new URL("../metadata.json", url), env)).toBeNull();
   });
 });
