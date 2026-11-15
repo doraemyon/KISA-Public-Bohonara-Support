@@ -38,6 +38,28 @@ describe("public notice archive", () => {
     expect(archiveLink("./metadata.json", page, archive)).toBeNull();
   });
 
+  it("serves downloads and readiness from D1 without requesting the old archive", async () => {
+    const byId = vi.fn(async (id: string) => id === "72298" ? { body: "UTF-8 영어 문서" } : null);
+    const db = {
+      prepare(statement: string) {
+        if (statement.includes("notice_archive_index")) return { first: async () => ({ ready: 1 }) };
+        return { bind: (id: string) => ({ first: () => byId(id) }) };
+      },
+    } as unknown as D1Database;
+    const network = vi.fn(() => { throw new Error("unexpected request"); });
+    vi.stubGlobal("fetch", network);
+    const native = { ...env, DB: db, NOTICE_WORKFLOW_REPOSITORY: "example/formatter" };
+    const download = await serveNoticePage(new URL("/notices/72298/en/notice.txt", publicSite), native);
+    expect(download?.headers.get("X-Notice-Archive")).toBe("d1");
+    expect(await download?.text()).toBe("UTF-8 영어 문서");
+    const ready = await serveNoticePage(new URL("/notices/72298/status.json", publicSite), native);
+    expect(await ready?.json()).toEqual({ state: "ready" });
+    const pending = await serveNoticePage(new URL("/notices/72299/status.json", publicSite), native);
+    expect(pending?.status).toBe(404);
+    expect(await pending?.json()).toEqual({ state: "pending" });
+    expect(network).not.toHaveBeenCalled();
+  });
+
   it("does not publish a single language when its counterpart is missing", async () => {
     vi.stubGlobal("fetch", vi.fn((url: URL) => {
       if (url.pathname.endsWith("/metadata.json")) {

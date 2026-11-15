@@ -1,4 +1,5 @@
 import { httpsUrl, NOTICE_ICON_PATH, publicSiteUrl } from "./config";
+import { findNoticeDocument, findNoticeIndex, hasNoticeDocument, hasNoticeIndex } from "./notice-storage";
 import { noticeIdFromLink } from "./rss";
 import { renderSiteHeader, SITE_SHELL_STYLESHEET } from "./site-header";
 import type { Env, InlineKeyboard } from "./types";
@@ -250,12 +251,37 @@ export async function serveNoticePage(url: URL, env: Env): Promise<Response | nu
   const id = document?.[1];
   const language = document?.[2] as Language | undefined;
   const text = Boolean(document?.[3]);
-  const base = httpsUrl(env.NOTICE_ARCHIVE_ORIGIN);
   const unavailable = (status: number) => id && language && !text
     ? pendingNotice(id, language, status)
     : new Response(status === 404 ? "문서를 찾을 수 없습니다." : "공지 문서를 확인하는 중입니다. 잠시 후 다시 시도해 주세요.", {
         status, headers: archiveHeaders("text/plain"),
       });
+  if (env.NOTICE_WORKFLOW_REPOSITORY && (index || id || statusId)) {
+    try {
+      const body = index
+        ? await findNoticeIndex(env.DB)
+        : id && language
+          ? await findNoticeDocument(env.DB, id, language, text)
+          : null;
+      if (body !== null) {
+        const headers = archiveHeaders(text ? "text/plain" : "text/html");
+        headers.set("X-Notice-Archive", "d1");
+        const response = new Response(body, { headers });
+        const base = new URL("/", url);
+        return text ? response : mirrorHtml(response, new URL(index ? "/" : path, base), base, language);
+      }
+      if (statusId && await hasNoticeDocument(env.DB, statusId)) return publicationResponse(200);
+      // Before the initial import finishes, keep the legacy archive available.
+      if (!index && await hasNoticeIndex(env.DB)) {
+        return statusId ? publicationResponse(404) : unavailable(404);
+      }
+    } catch (error) {
+      console.error("Could not read the notice archive", error);
+      if (!env.NOTICE_ARCHIVE_ORIGIN) return statusId ? publicationResponse(503) : unavailable(503);
+    }
+  }
+
+  const base = httpsUrl(env.NOTICE_ARCHIVE_ORIGIN);
   if (!base || base.origin === url.origin) {
     return statusId ? publicationResponse(503) : unavailable(503);
   }

@@ -5,7 +5,9 @@ export interface Env {
   ADMIN_TELEGRAM_USER_ID: string;
   BOT_USERNAME: string;
   KISA_RSS_URL: string;
-  NOTICE_ARCHIVE_ORIGIN: string;
+  NOTICE_ARCHIVE_ORIGIN?: string;
+  NOTICE_WORKFLOW_REPOSITORY?: string;
+  NOTICE_WORKFLOW_TOKEN?: string;
   PUBLIC_BASE_URL: string;
   MAX_SUBSCRIBERS: string;
   BROADCAST_BATCH_SIZE: string;

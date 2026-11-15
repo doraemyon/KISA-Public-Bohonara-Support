@@ -1,0 +1,101 @@
+name: Publish KISA notices to D1
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/publish-notices.yml"
+      - "scripts/publish_archive.py"
+  workflow_dispatch:
+    inputs:
+      notice_url:
+        description: KISA notice URL (optional; empty checks for missing notices)
+        type: string
+      notice_title:
+        description: KISA notice title
+        type: string
+  schedule:
+    - cron: "11,41 * * * *"
+    - cron: "17 17 * * *"
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: kisa-notice-publication
+  queue: max
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      GEMINI_API_KEY: ${{ secrets.PUBLIC_NOTICE_GEMINI_API_KEY }}
+      GEMINI_MODEL: ${{ vars.PUBLIC_NOTICE_GEMINI_MODEL }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.PUBLIC_NOTICE_TRANSLATION_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.PUBLIC_NOTICE_TRANSLATION_API_TOKEN }}
+      MYMEMORY_CONTACT_EMAIL: ${{ secrets.PUBLIC_NOTICE_MYMEMORY_CONTACT_EMAIL }}
+      PUBLIC_BASE_URL: ${{ vars.PUBLIC_BASE_URL || 'https://notice.bohonara.workers.dev' }}
+      NOTICE_URL: ${{ inputs.notice_url }}
+      NOTICE_TITLE: ${{ inputs.notice_title }}
+
+    steps:
+      - name: Check out the latest archive
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Find unpublished notices
+        id: discover
+        if: github.event_name != 'push' && env.NOTICE_URL == ''
+        env:
+          FULL_SCAN: ${{ github.event_name == 'workflow_dispatch' || github.event.schedule == '17 17 * * *' }}
+        run: |
+          args=(--discover-only)
+          if [[ "$FULL_SCAN" == "true" ]]; then
+            args+=(--full-scan)
+          fi
+          python3 scripts/recover_missing_notices.py "${args[@]}"
+
+      - name: Try online translation immediately
+        id: fast
+        if: env.NOTICE_URL != ''
+        continue-on-error: true
+        run: timeout 120s python3 scripts/process_notice.py
+
+      - name: Prepare offline translation
+        if: steps.fast.outcome == 'failure' || (steps.discover.outcome == 'success' && steps.discover.outputs.pending != '0')
+        uses: ./.github/actions/prepare-offline-translation
+        continue-on-error: true
+
+      - name: Save the new notice or retry with offline translation
+        if: env.NOTICE_URL != ''
+        env:
+          FAST_OUTCOME: ${{ steps.fast.outcome }}
+        run: |
+          if [[ "$FAST_OUTCOME" == "success" ]] || timeout 120s python3 scripts/process_notice.py; then
+            notice_id="$(python3 -c 'import os,sys; sys.path.insert(0,"scripts"); from process_notice import validate_notice_url; print(validate_notice_url(os.environ["NOTICE_URL"])[1])')"
+            python3 scripts/recovery_queue.py remove "$notice_id"
+          else
+            python3 scripts/recovery_queue.py add
+          fi
+
+      - name: Recover pending notices
+        if: steps.discover.outcome == 'success' && steps.discover.outputs.pending != '0'
+        run: python3 scripts/recover_missing_notices.py --queued-only --limit 12
+
+      - name: Save the archive and retry queue
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- site/index.html site/notices data/recovery_queue.json
+          if ! git diff --cached --quiet; then
+            git commit -m "content: update the bilingual KISA archive"
+            git push origin HEAD:main
+          fi
+
+      - name: Publish complete documents to D1
+        run: python3 scripts/publish_archive.py

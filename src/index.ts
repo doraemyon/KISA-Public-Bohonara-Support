@@ -17,7 +17,9 @@ import {
   submitApplication,
 } from "./applications";
 import { broadcastBatchSize, maxSubscribers, publicSiteUrl, required } from "./config";
+import { dispatchNoticePublication } from "./notice-dispatch";
 import { noticeKeyboard, serveNoticePage } from "./notice-pages";
+import { handleNoticePublication } from "./notice-storage";
 import { renderOnboardingPage } from "./onboarding";
 import { fetchKisaAttachmentIds, parseKisaRss } from "./rss";
 import {
@@ -505,13 +507,19 @@ async function runScheduled(env: Env): Promise<void> {
     console.error("KISA RSS synchronization failed", error);
   }
   await processPendingApplicationNotifications(env);
-  await processPendingDeliveries(env);
+  await Promise.all([
+    processPendingDeliveries(env),
+    dispatchNoticePublication(env).catch((error) => console.error("Could not start notice publication", error)),
+  ]);
   await cleanupExpiredData(env);
 }
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
+    if (url.pathname === "/internal/notice-publication") {
+      return handleNoticePublication(request, env);
+    }
     if (request.method === "GET" && url.pathname === "/") {
       return htmlResponse(renderOnboardingPage(env));
     }

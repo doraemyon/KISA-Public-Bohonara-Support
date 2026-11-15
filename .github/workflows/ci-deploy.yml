@@ -34,6 +34,9 @@ jobs:
       - name: Run checks
         run: npm run check
 
+      - name: Verify the bilingual formatter
+        run: python3 -m unittest discover -s tests
+
   deploy:
     if: ${{ github.event_name != 'pull_request' && vars.CLOUDFLARE_DEPLOY_ENABLED == 'true' }}
     needs: verify
@@ -65,6 +68,7 @@ jobs:
           MAX_APPLICATIONS_PER_HOUR: ${{ vars.MAX_APPLICATIONS_PER_HOUR }}
           ADMIN_NOTIFICATION_BATCH_SIZE: ${{ vars.ADMIN_NOTIFICATION_BATCH_SIZE }}
           ENABLE_CRON: ${{ vars.ENABLE_CRON }}
+          NOTICE_WORKFLOW_REPOSITORY: ${{ github.repository }}
         run: npm run render-config
 
       - name: Apply D1 migrations

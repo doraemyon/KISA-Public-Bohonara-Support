@@ -44,6 +44,13 @@ if (
 const template = JSON.parse(
   await readFile(new URL("../wrangler.template.json", import.meta.url), "utf8"),
 );
+const workflowRepository = process.env.NOTICE_WORKFLOW_REPOSITORY?.trim();
+if (workflowRepository) {
+  if (!/^[\w.-]+\/[\w.-]+$/.test(workflowRepository)) {
+    throw new Error("NOTICE_WORKFLOW_REPOSITORY must be a GitHub owner/repository name.");
+  }
+  template.vars.NOTICE_WORKFLOW_REPOSITORY = workflowRepository;
+}
 template.vars.BOT_USERNAME = botUsername;
 template.vars.PUBLIC_BASE_URL = publicBaseUrl.origin;
 template.vars.MAX_SUBSCRIBERS = bounded("MAX_SUBSCRIBERS", 50, 1, 500);

@@ -158,7 +158,7 @@ Cloudflare Worker의 **Settings → Variables and Secrets → Add**에서 모두
 | `TELEGRAM_BOT_TOKEN` | BotFather HTTP API token |
 | `TELEGRAM_WEBHOOK_SECRET` | `setup:telegram`이 출력한 값 |
 | `ADMIN_TELEGRAM_USER_ID` | `setup:telegram`이 출력한 관리자 숫자 ID |
-| `NOTICE_ARCHIVE_ORIGIN` | Worker가 서버에서 읽는 번역 문서의 HTTPS 기본 주소 |
+| `NOTICE_WORKFLOW_TOKEN` | 새 RSS 공지를 발견하면 포맷터를 즉시 실행하는 GitHub PAT (선택 사항) |
 
 이 값들은 Cloudflare에 암호화되어 저장되고 공개 GitHub 저장소에는 들어가지 않습니다.
 
@@ -258,3 +258,15 @@ npm run check
 - `MAX_SUBSCRIBERS`와 `BROADCAST_BATCH_SIZE`를 불필요하게 높이지 않습니다.
 
 취약점 제보 방법은 [SECURITY.md](SECURITY.md), 저장 데이터 범위는 [PRIVACY.md](PRIVACY.md)를 참고하세요.
+
+## 국문·영문 공지 게시
+
+공지 목록, 국문·영문 페이지와 텍스트 다운로드는 기존 주소에서 Worker가 D1 데이터를 읽어 제공합니다.
+`site/notices/`는 검증을 마친 문서와 재게시용 스냅숏을 보관합니다. Python 포맷터가 기존 번역 경로와 검증 규칙을 적용하고, 국문·영문 HTML과 다운로드 파일을 한 번에 D1에 저장합니다. 게시가 끝날 때까지 기존 Telegram 링크에는 준비 화면이 표시됩니다.
+
+- **새 공지 감지 즉시 시작:** 이 저장소에만 접근 가능한 GitHub fine-grained PAT에 **Actions: Read and write**를 부여하고 Worker Secret `NOTICE_WORKFLOW_TOKEN`에 등록합니다. 예약 복구도 별도로 동작합니다.
+- **번역 설정:** 공개 봇 저장소의 Actions Secrets에 기존 Gemini 키를 `PUBLIC_NOTICE_GEMINI_API_KEY`로 등록합니다. 모델을 지정했다면 Actions Variable `PUBLIC_NOTICE_GEMINI_MODEL`에도 같은 모델명을 넣습니다. Workers AI를 사용 중이면 기존 계정 ID와 API 토큰을 각각 `PUBLIC_NOTICE_TRANSLATION_ACCOUNT_ID`와 `PUBLIC_NOTICE_TRANSLATION_API_TOKEN`으로 등록합니다. MyMemory 연락 이메일은 `PUBLIC_NOTICE_MYMEMORY_CONTACT_EMAIL`을 사용합니다.
+- **문서 게시 인증:** `Publish KISA notices to D1` 워크플로는 GitHub Actions의 단기 OIDC 토큰을 사용합니다. D1 게시를 위한 장기 Cloudflare 토큰을 추가로 저장할 필요가 없습니다. Worker 변수 `NOTICE_WORKFLOW_REPOSITORY`는 게시를 허용할 GitHub 저장소 이름입니다. CI용 Wrangler 설정을 만들 때 `github.repository`로 지정합니다.
+- **복구:** 예약 실행은 KISA 게시판 최근 14일을 대조하고, 매일 한 번 및 수동 전체 실행은 최근 3개월을 확인합니다. 번역 실패는 큐에 다시 넣고, D1에 덜 올라간 문서는 다음 실행에서 다시 게시합니다.
+
+`python -m unittest discover -s tests`로 번역 및 서식 검사를, `npm run check`로 Worker 검사를 실행합니다.
