@@ -57,7 +57,7 @@ export function renderOnboardingPage(env: Env): string {
     .step__title { display:block; margin:0 0 2px; font-size:14px; line-height:28px; }
     .step__detail { margin:0; color:var(--muted); font-size:13px; line-height:1.65; }
     .step__detail strong { color:var(--text); }
-    .step__command { display:inline-block; max-width:100%; margin:9px 0 7px; padding:7px 11px; border:1px solid var(--border); border-radius:6px; background:var(--panel); color:#e6edf3; font:600 14px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace; overflow-wrap:anywhere; }
+    .step__command { display:inline-block; max-width:100%; margin:9px 0 7px; padding:7px 11px; border:1px solid var(--border); border-radius:6px; background:var(--panel); color:#e6edf3; font-family:inherit; font-size:14px; font-weight:600; line-height:1.5; overflow-wrap:anywhere; }
     .card { padding:24px; border:1px solid var(--border); border-radius:8px; background:var(--panel); box-shadow:0 16px 48px rgba(1,4,9,.35); text-align:center; }
     .qr { width:100%; aspect-ratio:1; overflow:hidden; border-radius:12px; background:#fff; }
     .qr svg { display:block; width:100%; height:100%; }
@@ -80,7 +80,7 @@ export function renderOnboardingPage(env: Env): string {
     <header class="intro">
       <p class="eyebrow">비공식 KISA 보호나라 보안공지</p>
       <h1>보호나라 보안공지를 놓치지 마세요.</h1>
-      <p class="lead">KISA(키사) 보호나라에 새 보안공지가 등록되면 텔레그램 개인 메시지로 전달합니다.<br>가입 신청 후 관리자 승인이 완료되면 별도 설정 없이 알림이 시작됩니다.</p>
+      <p class="lead">KISA 보호나라에 새 보안공지가 등록되면 텔레그램 개인 메시지로 전달합니다.<br>가입 신청 후 관리자 승인이 완료되면 별도 설정 없이 알림이 시작됩니다.</p>
     </header>
     <div class="layout">
       <section class="signup-steps" aria-labelledby="signup-steps-title">
@@ -96,7 +96,7 @@ export function renderOnboardingPage(env: Env): string {
           <li class="step">
             <span class="step__number" aria-hidden="true">2</span>
             <div>
-              <strong class="step__title">신청 명령 보내기</strong>
+              <strong class="step__title">알람 구독 신청하기</strong>
               <p class="step__detail">Telegram에서 <strong>시작</strong>을 누른 뒤, 봇의 개인 채팅에 아래 형식으로 보냅니다.</p>
               <code class="step__command">/${APPLICATION_COMMAND} 성명</code>
               <p class="step__detail">예) <strong>/${APPLICATION_COMMAND} 이예원</strong></p>
