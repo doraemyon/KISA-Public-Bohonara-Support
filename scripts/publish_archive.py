@@ -27,8 +27,12 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
-def request_json(url: str, token: str, body: bytes | None = None) -> dict:
-    headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+def request_json(url: str, token: str, body: bytes | None = None, *, stage: str) -> dict:
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json",
+        "User-Agent": "Mozilla/5.0 (compatible; KISA-Notice-Publisher/1.0)",
+    }
     if body is not None:
         headers["Content-Type"] = "application/json"
     request = urllib.request.Request(url, data=body, headers=headers)
@@ -38,12 +42,12 @@ def request_json(url: str, token: str, body: bytes | None = None) -> dict:
                 return json.load(response)
         except urllib.error.HTTPError as error:
             if error.code != 429 and not 500 <= error.code <= 599:
-                raise
+                raise RuntimeError(f"{stage} returned HTTP {error.code}.") from None
             if attempt == 2:
-                raise
+                raise RuntimeError(f"{stage} returned HTTP {error.code}.") from None
         except (OSError, TimeoutError):
             if attempt == 2:
-                raise
+                raise RuntimeError(f"{stage} timed out or could not be reached.") from None
         time.sleep(2 ** attempt)
     raise RuntimeError("Archive request failed.")
 
@@ -78,8 +82,9 @@ def main() -> None:
     jwt = request_json(
         oidc_url + separator + urllib.parse.urlencode({"audience": url}),
         process_notice.required_env("ACTIONS_ID_TOKEN_REQUEST_TOKEN"),
+        stage="GitHub OIDC token request",
     )["value"]
-    manifest = request_json(url, jwt)
+    manifest = request_json(url, jwt, stage="D1 archive manifest")
     site = process_notice.SITE_ROOT
     pending: list[bytes] = []
     total = 0
@@ -95,14 +100,18 @@ def main() -> None:
 
     # Never advance the public index until every listed document has been stored.
     with ThreadPoolExecutor(max_workers=3) as pool:
-        for result in pool.map(lambda body: request_json(url, jwt, body), pending):
+        for result in pool.map(lambda body: request_json(url, jwt, body, stage="D1 document upload"), pending):
             if result.get("ok") is not True:
                 raise RuntimeError("Worker did not acknowledge the document.")
     digest, body = package({"kind": "index", "html": (site / "index.html").read_text(encoding="utf-8")})
-    if manifest["index"] != digest and request_json(url, jwt, body).get("ok") is not True:
+    if manifest["index"] != digest and request_json(url, jwt, body, stage="D1 index publication").get("ok") is not True:
         raise RuntimeError("Worker did not acknowledge the index.")
     print(f"Published {len(pending)} changed bilingual notices; {total} ready in D1.")
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except (RuntimeError, OSError, ValueError, KeyError) as error:
+        print(f"::error::{error}", flush=True)
+        raise SystemExit(1) from None
