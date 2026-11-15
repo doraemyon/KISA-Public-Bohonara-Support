@@ -8,7 +8,7 @@ let expiresAt = 0;
 
 function decodeSegment(segment: string): Uint8Array<ArrayBuffer> {
   return Uint8Array.from(
-    atob(segment.replace(/-/g, "+").replace(/_/g, "/")),
+    atob(segment.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(segment.length / 4) * 4, "=")),
     (value) => value.charCodeAt(0),
   );
 }
@@ -19,7 +19,7 @@ async function signingKey(kid: string): Promise<SigningKey | undefined> {
       redirect: "error",
       signal: AbortSignal.timeout(5000),
     });
-    if (!response.ok) throw new Error("Could not read GitHub OIDC signing keys.");
+    if (!response.ok) throw new Error("GitHub key service HTTP " + response.status);
     const jwks = await response.json<{ keys: SigningKey[] }>();
     cachedKeys = jwks.keys;
     expiresAt = Date.now() + 60_000;
@@ -53,16 +53,22 @@ export async function isNoticePublisher(
       !Number.isSafeInteger(claims.nbf) || claims.nbf > now + 15
     ) return false;
     const jwk = await signingKey(kid);
-    if (!jwk) return false;
+    if (!jwk) {
+      console.warn("Notice publication: no matching GitHub signing key.");
+      return false;
+    }
     const algorithm = { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" };
     const key = await crypto.subtle.importKey("jwk", jwk, algorithm, false, ["verify"]);
-    return await crypto.subtle.verify(
+    const valid = await crypto.subtle.verify(
       algorithm.name,
       key,
       decodeSegment(signature),
       new TextEncoder().encode(header + "." + payload),
     );
-  } catch {
+    if (!valid) console.warn("Notice publication: GitHub signature did not verify.");
+    return valid;
+  } catch (error) {
+    console.warn("Notice publication: GitHub verification error", error instanceof Error ? error.name + ": " + error.message : "unknown");
     return false;
   }
 }

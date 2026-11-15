@@ -6,6 +6,7 @@ on:
     paths:
       - ".github/workflows/publish-notices.yml"
       - "scripts/publish_archive.py"
+      - "src/github-oidc.ts"
   workflow_dispatch:
     inputs:
       notice_url:
