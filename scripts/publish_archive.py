@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Publish complete bilingual documents from this repository to Cloudflare D1."""
 
+from base64 import urlsafe_b64decode
 from concurrent.futures import ThreadPoolExecutor
 from hashlib import sha256
 import json
@@ -84,7 +85,30 @@ def main() -> None:
         process_notice.required_env("ACTIONS_ID_TOKEN_REQUEST_TOKEN"),
         stage="GitHub OIDC token request",
     )["value"]
-    manifest = request_json(url, jwt, stage="D1 archive manifest")
+    try:
+        manifest = request_json(url, jwt, stage="D1 archive manifest")
+    except RuntimeError:
+        # Only report which fields differ; never log the token or claim values.
+        header, encoded, _signature = jwt.split(".")
+        claims = json.loads(urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4)))
+        repository = process_notice.required_env("GITHUB_REPOSITORY")
+        expects = {
+            "iss": "https://token.actions.githubusercontent.com",
+            "aud": url,
+            "repository": repository,
+            "ref": "refs/heads/main",
+            "workflow_ref": repository + "/.github/workflows/publish-notices.yml@refs/heads/main",
+            "event_name": process_notice.required_env("GITHUB_EVENT_NAME"),
+        }
+        checks = [key for key, expected in expects.items() if claims.get(key) != expected]
+        now = time.time()
+        if not isinstance(claims.get("exp"), int) or claims["exp"] <= now:
+            checks.append("exp")
+        if not isinstance(claims.get("nbf"), int) or claims["nbf"] > now + 15:
+            checks.append("nbf")
+        if checks:
+            print("::error::Unexpected GitHub OIDC fields: " + ", ".join(checks), flush=True)
+        raise
     site = process_notice.SITE_ROOT
     pending: list[bytes] = []
     total = 0
