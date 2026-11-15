@@ -40,7 +40,7 @@ export async function dispatchNoticePublication(env: Env): Promise<void> {
       body: JSON.stringify({
         ref: "main", inputs: { notice_url: source.link, notice_title: source.title },
       }),
-      redirect: "error",
+      redirect: "manual",
       signal: AbortSignal.timeout(8000),
     },
   );

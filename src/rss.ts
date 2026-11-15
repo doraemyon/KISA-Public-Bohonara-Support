@@ -31,7 +31,7 @@ export async function fetchKisaAttachmentIds(): Promise<Set<string>> {
   let noticeId = "";
   try {
     const response = await fetch(KISA_BOARD_URL, {
-      redirect: "error",
+      redirect: "manual",
       signal: AbortSignal.timeout(2500),
     });
     if (!response.ok) {

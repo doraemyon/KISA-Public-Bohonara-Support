@@ -16,7 +16,7 @@ function decodeSegment(segment: string): Uint8Array<ArrayBuffer> {
 async function signingKey(kid: string): Promise<SigningKey | undefined> {
   if (Date.now() >= expiresAt) {
     const response = await fetch(KEY_URL, {
-      redirect: "error",
+      redirect: "manual",
       signal: AbortSignal.timeout(5000),
     });
     if (!response.ok) throw new Error("GitHub key service HTTP " + response.status);
