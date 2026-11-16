@@ -103,8 +103,8 @@ class ProcessNoticeTests(unittest.TestCase):
         document = process_notice.korean_document(title, body)
 
         self.assertTrue(process_notice.is_update_advisory(title, body))
-        self.assertIn(f"금일 KISA 공지 “{title}” 전파드리오니, 영향 버전을 가용중인 각 관계사 "
-            "담당자 분들께 최신 버전으로 업데이트 권고드립니다.", document)
+        self.assertIn(f"금일 KISA 공지 “{title}” 전파드리오니, 영향 버전을 가용 중인 각 관계사 "
+            "담당자분들께 최신 버전으로 업데이트 권고드립니다.", document)
 
     def test_explicit_update_advisory_does_not_depend_on_body_keywords(self) -> None:
         title = "제품 보안 업데이트 권고"
@@ -112,8 +112,8 @@ class ProcessNoticeTests(unittest.TestCase):
 
         self.assertTrue(process_notice.is_update_advisory(title, body))
         self.assertIn(
-            f"금일 KISA 공지 “{title}” 전파드리오니, 영향 버전을 가용중인 각 관계사 "
-            "담당자 분들께 최신 버전으로 업데이트 권고드립니다.",
+            f"금일 KISA 공지 “{title}” 전파드리오니, 영향 버전을 가용 중인 각 관계사 "
+            "담당자분들께 최신 버전으로 업데이트 권고드립니다.",
             process_notice.korean_document(title, body),
         )
 
@@ -126,8 +126,8 @@ class ProcessNoticeTests(unittest.TestCase):
 
         self.assertTrue(process_notice.is_update_advisory(title, body))
         self.assertIn(
-            f"금일 KISA 공지 “{title}” 전파드리오니, 영향 버전을 가용중인 각 관계사 "
-            "담당자 분들께 최신 버전으로 업데이트 권고드립니다.",
+            f"금일 KISA 공지 “{title}” 전파드리오니, 영향 버전을 가용 중인 각 관계사 "
+            "담당자분들께 최신 버전으로 업데이트 권고드립니다.",
             process_notice.korean_document(title, body),
         )
 
