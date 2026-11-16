@@ -17,6 +17,7 @@ import {
   submitApplication,
 } from "./applications";
 import { broadcastBatchSize, maxSubscribers, publicSiteUrl, required } from "./config";
+import { processDiscordNotices } from "./discord";
 import { dispatchNoticePublication } from "./notice-dispatch";
 import { noticeKeyboard, serveNoticePage } from "./notice-pages";
 import { handleNoticePublication } from "./notice-storage";
@@ -499,15 +500,16 @@ async function cleanupExpiredData(env: Env): Promise<void> {
 }
 
 async function runScheduled(env: Env): Promise<void> {
-  required(env.TELEGRAM_BOT_TOKEN, "TELEGRAM_BOT_TOKEN");
+  const startedAt = new Date().toISOString();
   try {
     const notices = await fetchCurrentNotices(env);
     await seedOrQueueNotices(env, notices);
   } catch (error) {
     console.error("KISA RSS synchronization failed", error);
   }
-  await processPendingApplicationNotifications(env);
   await Promise.all([
+    processDiscordNotices(env, startedAt).catch(() => console.error("Discord delivery queue failed")),
+    processPendingApplicationNotifications(env),
     processPendingDeliveries(env),
     dispatchNoticePublication(env).catch((error) => console.error("Could not start notice publication", error)),
   ]);

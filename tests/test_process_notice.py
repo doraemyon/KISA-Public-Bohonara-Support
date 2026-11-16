@@ -103,7 +103,8 @@ class ProcessNoticeTests(unittest.TestCase):
         document = process_notice.korean_document(title, body)
 
         self.assertTrue(process_notice.is_update_advisory(title, body))
-        self.assertIn("영향 버전을 가용중인 각 관계사 담당자 분들께 업데이트 권고", document)
+        self.assertIn(f"금일 KISA 공지 “{title}” 전파드리오니, 영향 버전을 가용중인 각 관계사 "
+            "담당자 분들께 최신 버전으로 업데이트 권고드립니다.", document)
 
     def test_explicit_update_advisory_does_not_depend_on_body_keywords(self) -> None:
         title = "제품 보안 업데이트 권고"
@@ -111,7 +112,8 @@ class ProcessNoticeTests(unittest.TestCase):
 
         self.assertTrue(process_notice.is_update_advisory(title, body))
         self.assertIn(
-            "영향 버전을 가용중인 각 관계사 담당자 분들께 업데이트 권고",
+            f"금일 KISA 공지 “{title}” 전파드리오니, 영향 버전을 가용중인 각 관계사 "
+            "담당자 분들께 최신 버전으로 업데이트 권고드립니다.",
             process_notice.korean_document(title, body),
         )
 
@@ -124,7 +126,8 @@ class ProcessNoticeTests(unittest.TestCase):
 
         self.assertTrue(process_notice.is_update_advisory(title, body))
         self.assertIn(
-            "영향 버전을 가용중인 각 관계사 담당자 분들께 업데이트 권고",
+            f"금일 KISA 공지 “{title}” 전파드리오니, 영향 버전을 가용중인 각 관계사 "
+            "담당자 분들께 최신 버전으로 업데이트 권고드립니다.",
             process_notice.korean_document(title, body),
         )
 
@@ -139,9 +142,15 @@ class ProcessNoticeTests(unittest.TestCase):
             summary,
             "We are disseminating today's KISA announcement "
             '"Product Security Update Advisory". We recommend that representatives at '
-            "each affiliated company using an affected version update, and please reply "
-            "if you have any specific issues.",
+            "each affiliated company using an affected version update to the latest version.",
         )
+
+    def test_refresh_update_advisory_summary_preserves_body(self) -> None:
+        old = "제목:\nA 제품 보안 업데이트 권고\n\n요약:\n이전 요약\n\n본문:\n□ 개요\n  고유한 본문\n\n"
+        updated = process_notice.refresh_update_advisory_summary(old)
+        self.assertIn("최신 버전으로 업데이트 권고드립니다.", updated)
+        self.assertEqual(updated.split("\n\n본문:\n", 1)[1], old.split("\n\n본문:\n", 1)[1])
+        self.assertEqual(process_notice.refresh_update_advisory_summary(updated), updated)
 
     def test_non_update_notice_uses_general_summary(self) -> None:
         title = "최근 사이버공격 대비 기업 보안강화 권고"

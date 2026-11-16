@@ -425,10 +425,19 @@ def is_update_advisory(title: str, body: str) -> bool:
 def korean_summary(title: str, body: str) -> str:
     if is_update_advisory(title, body):
         return (
-            f'금일 KISA 공지 "{title}" 전파드리오니, 영향 버전을 가용중인 각 관계사 '
-            "담당자 분들께 업데이트 권고 드리며 특이사항 있으시면 회신 바랍니다."
+            f"금일 KISA 공지 “{title}” 전파드리오니, 영향 버전을 가용중인 각 관계사 "
+            "담당자 분들께 최신 버전으로 업데이트 권고드립니다."
         )
     return f'금일 KISA 공지 "{title}" 전파드리오니, 특이사항 있으시면 회신 바랍니다.'
+
+
+def refresh_update_advisory_summary(document: str) -> str:
+    title, body = korean_document_parts(document)
+    if not title or not is_update_advisory(title, body):
+        return document
+    pattern = r"(\n\n요약:\n).*?(\n\n본문:\n)"
+    return re.sub(pattern, lambda match: f"{match[1]}{korean_summary(title, body)}{match[2]}",
+                  document, count=1, flags=re.DOTALL)
 
 
 def korean_document(title: str, body: str) -> str:
@@ -441,7 +450,7 @@ def english_summary(korean_title: str, english_title: str, body: str) -> str:
     if is_update_advisory(korean_title, body):
         return (
             f"{prefix} We recommend that representatives at each affiliated company using "
-            "an affected version update, and please reply if you have any specific issues."
+            "an affected version update to the latest version."
         )
     return f"{prefix} Please reply if you have any specific issues."
 
@@ -1473,7 +1482,10 @@ def refresh_stored_notice_pages() -> None:
         english_path = metadata_path.parent / "en" / "notice.txt"
         migrated_metadata = False
         if korean_path.exists() and english_path.exists():
-            korean_text = korean_path.read_text(encoding="utf-8")
+            original_korean = korean_path.read_text(encoding="utf-8")
+            korean_text = refresh_update_advisory_summary(original_korean)
+            if korean_text != original_korean:
+                korean_path.write_text(korean_text, encoding="utf-8", newline="\n")
             original_english = english_path.read_text(encoding="utf-8")
             english_text = original_english
             english_text = normalize_english_sections(english_text)

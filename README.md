@@ -89,6 +89,12 @@ Remove-Item Env:TELEGRAM_BOT_TOKEN
 
 스크립트가 bot token 검증, 봇 사용자 이름 조회, 명령어·설명 등록, 관리자 숫자 ID 확인과 webhook secret 생성을 처리합니다. 출력된 `BOT_USERNAME`, `ADMIN_TELEGRAM_USER_ID`, `TELEGRAM_WEBHOOK_SECRET`은 다음 설정에 사용합니다.
 
+### 선택: Discord 채널에 공지 받기
+
+1. Discord 서버의 **서버 설정 → 연동 → 웹후크**에서 텍스트 채널용 웹후크를 만들고 URL을 복사합니다. 이 작업에는 웹후크 관리 권한이 필요합니다.
+2. Cloudflare의 `notice` Worker **Settings → Variables and Secrets → Add**에서 `DISCORD_WEBHOOK_URL`을 **Secret**으로 등록하고 배포합니다. 웹후크 URL은 채널에 글을 쓸 수 있는 자격 증명이므로 저장소나 채팅에 올리지 않습니다.
+3. 연결 후 새로 감지되는 공지는 기존 Telegram 구독자와 지정한 Discord 채널에 전송됩니다. 공지 원문과 국문·영문 링크가 제공됩니다. 별도 Discord 봇이나 서버는 필요하지 않습니다. 개인만 받으려면 비공개 텍스트 채널을 선택하세요.
+
 ## 2. Cloudflare D1 만들기
 
 1. [Cloudflare Dashboard](https://dash.cloudflare.com/)에 무료 계정을 만듭니다.
