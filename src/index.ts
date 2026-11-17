@@ -17,9 +17,9 @@ import {
   submitApplication,
 } from "./applications";
 import { broadcastBatchSize, maxSubscribers, publicSiteUrl, required } from "./config";
-import { processDiscordNotices } from "./discord";
-import { handleDiscordInteraction } from "./discord-applications";
-import { discordConfig } from "./discord-config";
+import { handleDiscordAdminCommand, handleDiscordCallback, processDiscordNotices } from "./discord";
+import { DISCORD_AUTH_PATH, DISCORD_CALLBACK_PATH } from "./discord-connection";
+import { completeDiscordSignup, startDiscordSignup } from "./discord-signup";
 import { dispatchNoticePublication } from "./notice-dispatch";
 import { noticeKeyboard, serveNoticePage } from "./notice-pages";
 import { handleNoticePublication } from "./notice-storage";
@@ -176,6 +176,7 @@ async function handleAdminCommand(
     return false;
   }
 
+  if (await handleDiscordAdminCommand(env, chatId, name, args)) return true;
   if (name === "invite") {
     await createInvite(env, chatId, args);
     return true;
@@ -338,7 +339,9 @@ async function handleWebhook(request: Request, env: Env): Promise<Response> {
   try {
     const update = (await request.json()) as TelegramUpdate;
     if (update.callback_query) {
-      await handleApplicationCallback(env, update.callback_query);
+      if (!await handleDiscordCallback(env, update.callback_query)) {
+        await handleApplicationCallback(env, update.callback_query);
+      }
     } else if (update.message) {
       await handleCommand(env, update.message);
     }
@@ -502,7 +505,6 @@ async function cleanupExpiredData(env: Env): Promise<void> {
 }
 
 async function runScheduled(env: Env): Promise<void> {
-  const startedAt = new Date().toISOString();
   try {
     const notices = await fetchCurrentNotices(env);
     await seedOrQueueNotices(env, notices);
@@ -510,22 +512,16 @@ async function runScheduled(env: Env): Promise<void> {
     console.error("KISA RSS synchronization failed", error);
   }
   await Promise.all([
-    processDiscordNotices(env, startedAt).catch(() => console.error("Discord delivery queue failed")),
+    processDiscordNotices(env).catch(() => console.error("Discord delivery queue failed")),
     processPendingApplicationNotifications(env),
     processPendingDeliveries(env),
     dispatchNoticePublication(env).catch((error) => console.error("Could not start notice publication", error)),
   ]);
   await cleanupExpiredData(env);
-  const discord = discordConfig(env);
-  if (discord) {
-    const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-    await env.DB.prepare("DELETE FROM discord_applications WHERE guild_id = ?1 AND requested_at < ?2")
-      .bind(discord.guildId, cutoff).run();
-  }
 }
 
 export default {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === "/internal/notice-publication") {
       return handleNoticePublication(request, env);
@@ -536,8 +532,11 @@ export default {
     if (request.method === "GET" && url.pathname === "/healthz") {
       return jsonResponse({ ok: true, version: VERSION });
     }
-    if (request.method === "POST" && url.pathname === "/discord/interactions") {
-      return handleDiscordInteraction(request, env, ctx);
+    if (url.pathname === DISCORD_AUTH_PATH && (request.method === "GET" || request.method === "POST")) {
+      return startDiscordSignup(request, env);
+    }
+    if (request.method === "GET" && url.pathname === DISCORD_CALLBACK_PATH) {
+      return completeDiscordSignup(request, env);
     }
     if (request.method === "POST" && url.pathname === "/telegram/webhook") {
       return handleWebhook(request, env);

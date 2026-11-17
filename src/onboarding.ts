@@ -1,7 +1,7 @@
 import { renderSVG } from "uqr";
 import { APPLICATION_COMMAND } from "./access";
 import { NOTICE_ICON_PATH, publicSiteUrl, required } from "./config";
-import { discordConfig } from "./discord-config";
+import { DISCORD_AUTH_PATH, discordSignupConfig } from "./discord-connection";
 import { renderSiteHeader, SITE_SHELL_STYLESHEET } from "./site-header";
 import { renderTelegramQr } from "./telegram-qr";
 import type { Env } from "./types";
@@ -30,8 +30,8 @@ export function renderOnboardingPage(env: Env): string {
   const safeBotLink = escapeHtml(botLink);
   const safeBotUsername = escapeHtml(botUsername);
   const canonical = publicSiteUrl(env);
-  const discord = discordConfig(env);
-  const discordCard = renderDiscordCard(discord?.inviteUrl);
+  const discordCard = renderDiscordCard(canonical && discordSignupConfig(env)
+    ? new URL(DISCORD_AUTH_PATH, canonical).href : undefined);
 
   return `<!doctype html>
 <html lang="ko">
@@ -146,8 +146,8 @@ export function renderOnboardingPage(env: Env): string {
 </html>`;
 }
 
-function renderDiscordCard(invite: string | undefined): string {
-  if (!invite) {
+function renderDiscordCard(signupUrl: string | undefined): string {
+  if (!signupUrl) {
     return `<section class="discord-status" id="discord" aria-labelledby="discord-title">
       <h2 class="steps-title" id="discord-title">Discord 가입</h2>
       <p>Discord 구독 신청은 연결 준비 중입니다.</p>
@@ -159,25 +159,25 @@ function renderDiscordCard(invite: string | undefined): string {
         <ol class="steps" role="list">
           <li class="step">
             <span class="step__number" aria-hidden="true">1</span>
-            <div><strong class="step__title">Discord 서버 들어가기</strong>
+            <div><strong class="step__title">가입 신청 열기</strong>
               <p class="step__detail">QR을 스캔하거나 <strong>Discord에서 신청</strong>을 누릅니다.</p></div>
           </li>
           <li class="step">
             <span class="step__number" aria-hidden="true">2</span>
             <div><strong class="step__title">알림 구독 신청하기</strong>
-              <p class="step__detail">가입 신청 채널에서 <strong>/알림신청</strong>을 실행하고 <strong>성명</strong>을 입력하세요.</p></div>
+              <p class="step__detail">성명을 입력한 뒤 Discord 인증 화면에서 <strong>본인이 관리하는 비공개 채널</strong>을 선택하세요.</p></div>
           </li>
           <li class="step">
             <span class="step__number" aria-hidden="true">3</span>
             <div><strong class="step__title">관리자 승인 기다리기</strong>
-              <p class="step__detail">승인되면 비공개 보안공지 채널이 표시됩니다. 푸시가 필요하면 채널 알림을 <strong>모든 메시지</strong>로 설정하세요.</p></div>
+              <p class="step__detail">승인되면 선택한 채널로 새 공지가 전송됩니다. 푸시가 필요하면 채널 알림을 <strong>모든 메시지</strong>로 설정하세요.</p></div>
           </li>
         </ol>
       </div>
       <aside class="card" aria-label="Discord 가입 신청">
-        <div class="qr" role="img" aria-label="Discord 가입 QR 코드">${renderSVG(invite, { border: 4, ecc: "M" })}</div>
+        <div class="qr" role="img" aria-label="Discord 가입 QR 코드">${renderSVG(signupUrl, { border: 4, ecc: "M" })}</div>
         <h2>Discord에서 신청</h2>
-        <a class="button discord" href="${escapeHtml(invite)}">Discord에서 신청</a>
+        <a class="button discord" href="${escapeHtml(signupUrl)}">Discord에서 신청</a>
         <p class="fineprint">성명은 관리자 승인에만 사용되며 신청 처리 후 삭제됩니다.</p>
       </aside>
     </section>`;

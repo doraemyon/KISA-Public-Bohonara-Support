@@ -70,7 +70,7 @@ flowchart TD
     linkStyle default stroke:#78869C,stroke-width:1.5px;
 ```
 
-Cloudflare나 Gemini에 필요한 키가 설정된 경우 해당 서비스를 시도합니다. 번역 검증에서는 문서의 제목·요약·본문과 CVE 번호, 버전, 링크 등 핵심 정보가 보존됐는지 확인합니다. 알림은 문서 게시와 별도로 Telegram 구독자와 Discord 비공개 채널에 발송합니다. 문서가 준비되는 동안 국문·영문 링크에는 준비 상태가 표시됩니다.
+Cloudflare나 Gemini에 필요한 키가 설정된 경우 해당 서비스를 시도합니다. 번역 검증에서는 문서의 제목·요약·본문과 CVE 번호, 버전, 링크 등 핵심 정보가 보존됐는지 확인합니다. 알림은 문서 게시와 별도로 Telegram 구독자와 구독자가 연결한 Discord 비공개 채널에 발송합니다. 문서가 준비되는 동안 국문·영문 링크에는 준비 상태가 표시됩니다.
 
 ## 가입 신청과 접근 통제
 
@@ -136,65 +136,34 @@ Remove-Item Env:TELEGRAM_BOT_TOKEN
 
 ### Discord 알림 구독 연결
 
-가입 페이지의 Discord QR로 서버에 들어온 사용자는 `#가입신청`에서 `/알림신청`에 성명을 입력합니다. 관리자가 `/알림관리`에서 승인하면 봇이 `공지 구독자` 역할을 부여합니다. 승인된 사용자에게 비공개 `#보안공지` 채널이 표시됩니다. 구독을 해제하려면 Discord에서 그 사용자의 구독자 역할을 제거합니다.
+구독자는 가입 페이지의 Discord QR을 열고 성명을 입력합니다. Discord 인증 화면에서 자신이 관리하는 비공개 텍스트 채널을 선택하면 알리미의 웹훅이 그 채널에 연결됩니다. 관리자가 텔레그램의 비공개 관리자 채팅에서 신청을 승인하면 이후 새 KISA 공지를 해당 채널에 보냅니다. 구독자와 관리자는 각자 Discord 채널에서 활동합니다.
 
-#### 1. 서버와 신청 채널 만들기
+#### 운영자 설정
 
-1. Discord 데스크톱 앱이나 웹에서 왼쪽 **＋ → 직접 만들기(Create My Own)**를 선택합니다. 관리 권한이 있는 기존 서버를 써도 됩니다.
-2. 일반 텍스트 채널 `#가입신청`을 만듭니다. 일반 멤버에게 **채널 보기**와 **애플리케이션 명령 사용(Use Application Commands)**을 허용합니다.
-3. `#가입신청`을 우클릭해 **친구 초대**를 열고 초대 링크를 복사합니다. 이 링크가 QR의 목적지가 됩니다. 링크에 만료일이 있으면 만료 전에 새 링크를 발급하고 4단계의 설정을 다시 실행합니다.
+1. [Discord Developer Portal](https://discord.com/developers/applications)에서 앱을 만듭니다. **OAuth2 → Redirects**에 운영 Worker의 `/discord/callback` 주소를 정확히 추가합니다. 이 프로젝트의 운영 주소는 `https://notice.bohonara.workers.dev/discord/callback`입니다.
+2. Worker의 **Settings → Variables and Secrets**에 아래 세 값을 **Secret**으로 저장합니다.
 
-#### 2. Discord 봇을 만들고 서버에 설치하기
+   | Secret | 값 |
+   | --- | --- |
+   | `DISCORD_CLIENT_ID` | Discord 앱의 Application ID |
+   | `DISCORD_CLIENT_SECRET` | Discord 앱의 OAuth2 Client Secret |
+   | `DISCORD_WEBHOOK_KEY` | 웹훅 자격 증명 암호화 키. 임의로 생성한 32바이트를 64자리 16진수로 입력 |
 
-1. [Discord Developer Portal](https://discord.com/developers/applications)에서 **New Application**을 누르고 앱 이름을 정합니다. **General Information**에서 **Application ID**와 **Public Key**를 복사합니다.
-2. **Installation**에서 **Guild Install**을 켜고 **Install Link → Discord Provided Link**를 선택합니다. **Default Install Settings → Guild Install**에 `bot`, `applications.commands`를 추가하고 봇 권한으로 **Manage Roles**를 선택한 뒤 저장합니다.
-3. 설치 링크를 열어 **서버에 추가(Add to Server)**를 선택하고 1단계의 서버를 고릅니다. **Bot** 메뉴에서 발급한 **Token**은 4단계의 PowerShell 입력창에 사용합니다.
+   로컬에서 암호화 키를 생성해 Worker에 직접 저장하려면 아래 명령을 실행합니다. 기존 연결을 보관하려면 최초 설정에서만 생성합니다.
 
-#### 3. 승인 전용 채널의 권한 설정하기
+   ```powershell
+   node -e "process.stdout.write(require('node:crypto').randomBytes(32).toString('hex'))" | node node_modules/wrangler/bin/wrangler.js secret put DISCORD_WEBHOOK_KEY --config .wrangler/deploy.jsonc
+   ```
 
-서버 **설정 → 역할**에서 `공지 구독자` 역할을 만들고 서버 전체 권한은 모두 끕니다. 역할 목록에서 봇의 역할을 `공지 구독자`보다 위에 둡니다. 관리자의 계정에는 **역할 관리** 권한이 필요합니다.
+3. QR로 신청하고 텔레그램 관리자 채팅의 **승인** 버튼을 누릅니다. `/discordapplications`로 대기 신청을 다시 열 수 있습니다. 연결을 해제할 때는 같은 채팅에서 `/discordrevoke 신청번호`를 실행합니다.
 
-일반 텍스트 채널 `#보안공지`를 비공개로 만들고 **채널 편집 → 권한**에서 아래처럼 설정합니다.
+#### 구독자가 사용하는 방법
 
-| 대상 | 허용 | 거부 |
-| --- | --- | --- |
-| `@everyone` |  | 채널 보기 |
-| `공지 구독자` 역할 | 채널 보기, 메시지 기록 읽기 | 메시지 보내기 |
-| 봇 계정 | 채널 보기, 메시지 보내기, 링크 임베드 |  |
+1. 본인이 웹훅을 관리할 수 있는 Discord 서버에 비공개 텍스트 채널을 마련합니다.
+2. [가입 페이지](https://notice.bohonara.workers.dev/)의 **Discord에서 신청**을 누르거나 QR을 스캔해 성명을 입력합니다. Discord가 채널을 묻는 화면에서 비공개 채널을 선택합니다.
+3. 승인이 완료되면 새 공지가 선택한 채널로 전송됩니다. 푸시가 필요하면 채널 **알림 설정 → 모든 메시지**를 선택합니다. 구독을 취소하려면 Discord의 채널 웹훅을 삭제하세요.
 
-채널 권한에서 봇 계정을 멤버로 추가합니다. 채널 보기 허용 대상은 표에 있는 구독자 역할과 봇 계정으로 설정합니다. Discord 서버 소유자와 **관리자(Administrator)** 권한 보유자는 Discord 권한 모델에 따라 채널을 관리할 수 있습니다.
-
-#### 4. QR 링크와 승인 명령 연결하기
-
-Discord **사용자 설정 → 고급 → 개발자 모드**를 켭니다. 서버 아이콘, 본인 프로필, 각 채널, 구독자 역할을 우클릭하고 **ID 복사**를 선택합니다. 아래 PowerShell의 따옴표 안을 복사한 값으로 채웁니다. 운영 Worker의 Wrangler 설정(`.wrangler/deploy.jsonc`)이 있는 저장소 폴더에서 실행합니다.
-
-```powershell
-$discordSettings = @{
-    applicationId = 'Discord Application ID'
-    publicKey = 'Discord Public Key'
-    adminUserId = '본인 Discord 사용자 ID'
-    guildId = 'Discord 서버 ID'
-    requestChannelId = '가입신청 채널 ID'
-    noticeChannelId = '보안공지 채널 ID'
-    subscriberRoleId = '공지 구독자 역할 ID'
-    inviteUrl = 'https://discord.gg/초대코드'
-    botToken = [System.Net.NetworkCredential]::new('', (Read-Host 'Discord Bot Token' -AsSecureString)).Password
-}
-$discordSettings | ConvertTo-Json -Compress | node scripts/setup-discord.mjs
-Remove-Variable discordSettings
-```
-
-실행 중 `Discord Bot Token` 입력창이 뜨면 토큰을 붙여넣습니다. 스크립트는 초대 링크와 채널 권한을 검증하고 명령을 등록한 뒤 Cloudflare Worker Secret `DISCORD_SUBSCRIPTION`에 설정을 저장합니다.
-
-Developer Portal의 **General Information → Interactions Endpoint URL**에 `https://notice.bohonara.workers.dev/discord/interactions`을 입력하고 **Save Changes**를 누릅니다.
-
-#### 5. 신청부터 승인까지 확인하기
-
-1. [가입 페이지](https://notice.bohonara.workers.dev/)에서 QR을 열고, 일반 계정으로 서버에 들어갑니다. 승인 전에는 `#보안공지`가 숨겨져 있는지 확인합니다.
-2. `#가입신청`에서 `/알림신청`을 실행하고 **성명**을 입력합니다. 관리자는 자신의 계정으로 `/알림관리`를 실행하고 **승인**을 누릅니다.
-3. 신청자에게 `#보안공지`가 열리는지 확인합니다. 푸시 알림을 받으려면 채널 이름을 우클릭해 **알림 설정 → 모든 메시지**를 선택합니다. 설정 이후 새 KISA 공지는 봇이 채널에 게시합니다.
-
-신청 성명은 승인 또는 거절 시 삭제되며, 오래된 미처리 신청은 30일 후 정리합니다. 공개 공지 목록과 국문·영문 문서는 누구나 열람할 수 있습니다.
+Discord는 채널 연결 권한을 확인합니다. 신청자가 선택한 채널의 공개 범위는 신청자 본인이 확인해야 합니다. 성명은 승인·거절을 판단하는 데 사용하며, 처리 시 신청 데이터베이스에서 삭제합니다. 공개 공지 목록과 국문·영문 문서는 누구나 열람할 수 있습니다.
 
 ## 2. Cloudflare D1 만들기
 
