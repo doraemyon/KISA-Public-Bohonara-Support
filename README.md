@@ -30,25 +30,29 @@ GitHub Public 저장소 ──배포──> Cloudflare Worker
 ## 공지 감지부터 번역·게시까지
 
 ```mermaid
+---
+config:
+  htmlLabels: false
+---
 flowchart TD
     A(["KISA 공지 등록"]) --> B["RSS 확인<br/>누락 공지 점검"]
     B --> C{"새 공지이거나<br/>게시가 빠졌나요?"}
-    C -->|NO| D(["다음 확인까지 대기"])
+    C -->|NO| D(["다음 확인까지<br/>대기"])
     C -->|YES| E["KISA 원문 읽기<br/>국문 문서 만들기"]
-    E --> F["영문 번역<br/>Cloudflare → Google"]
+    E --> F["영문 번역<br/>Cloudflare<br/>→ Google"]
     F --> G{"번역 검증을<br/>통과했나요?"}
     G -->|YES| L["국문·영문 문서<br/>D1에 함께 게시"]
     G -->|NO| H["Gemini로 다시 번역<br/>키가 있으면 시도"]
     H --> I{"번역 검증을<br/>통과했나요?"}
     I -->|YES| L
-    I -->|NO| J["MyMemory → OPUS-MT<br/>OPUS-MT는 오프라인"]
+    I -->|NO| J["MyMemory<br/>→ 오프라인 OPUS-MT"]
     J --> K{"번역 검증을<br/>통과했나요?"}
     K -->|YES| L
     K -->|NO| M["복구 큐에 저장<br/>다음 실행에서 재시도"]
     M --> E
     L --> N(["공개 공지 목록<br/>열람 · 복사 · 다운로드"])
     B --> O{"RSS에 새 공지가<br/>올라왔나요?"}
-    O -->|YES| P["새 공지 알림<br/>Telegram 구독자<br/>Discord 비공개 채널"]
+    O -->|YES| P["새 공지 알림<br/>Telegram 구독자<br/>Discord 채널"]
     O -->|NO| D
 
     classDef entry fill:#E5F6EF,stroke:#4B927C,color:#164F3E,stroke-width:1.5px,font-weight:600;
@@ -66,7 +70,7 @@ flowchart TD
     linkStyle default stroke:#78869C,stroke-width:1.5px;
 ```
 
-Cloudflare나 Gemini에 필요한 키가 설정된 경우 해당 서비스를 시도합니다. 번역 검증에서는 문서의 제목·요약·본문과 CVE 번호, 버전, 링크 등 핵심 정보가 보존됐는지 확인합니다. 알림은 문서 게시와 별도로 발송되며, 문서가 준비되는 동안 국문·영문 링크에는 준비 상태가 표시됩니다.
+Cloudflare나 Gemini에 필요한 키가 설정된 경우 해당 서비스를 시도합니다. 번역 검증에서는 문서의 제목·요약·본문과 CVE 번호, 버전, 링크 등 핵심 정보가 보존됐는지 확인합니다. 알림은 문서 게시와 별도로 Telegram 구독자와 Discord 비공개 채널에 발송합니다. 문서가 준비되는 동안 국문·영문 링크에는 준비 상태가 표시됩니다.
 
 ## 가입 신청과 접근 통제
 
