@@ -70,6 +70,7 @@ describe("Telegram application messages", () => {
           }),
         }),
         env,
+        {} as ExecutionContext,
       );
 
     try {

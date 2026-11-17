@@ -18,6 +18,8 @@ import {
 } from "./applications";
 import { broadcastBatchSize, maxSubscribers, publicSiteUrl, required } from "./config";
 import { processDiscordNotices } from "./discord";
+import { handleDiscordInteraction } from "./discord-applications";
+import { discordConfig } from "./discord-config";
 import { dispatchNoticePublication } from "./notice-dispatch";
 import { noticeKeyboard, serveNoticePage } from "./notice-pages";
 import { handleNoticePublication } from "./notice-storage";
@@ -514,10 +516,16 @@ async function runScheduled(env: Env): Promise<void> {
     dispatchNoticePublication(env).catch((error) => console.error("Could not start notice publication", error)),
   ]);
   await cleanupExpiredData(env);
+  const discord = discordConfig(env);
+  if (discord) {
+    const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    await env.DB.prepare("DELETE FROM discord_applications WHERE guild_id = ?1 AND requested_at < ?2")
+      .bind(discord.guildId, cutoff).run();
+  }
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === "/internal/notice-publication") {
       return handleNoticePublication(request, env);
@@ -527,6 +535,9 @@ export default {
     }
     if (request.method === "GET" && url.pathname === "/healthz") {
       return jsonResponse({ ok: true, version: VERSION });
+    }
+    if (request.method === "POST" && url.pathname === "/discord/interactions") {
+      return handleDiscordInteraction(request, env, ctx);
     }
     if (request.method === "POST" && url.pathname === "/telegram/webhook") {
       return handleWebhook(request, env);

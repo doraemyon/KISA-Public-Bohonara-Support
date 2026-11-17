@@ -1,3 +1,5 @@
+import { approvedNoticeChannel, discordApi, discordConfig } from "./discord-config";
+import type { DiscordConfig } from "./discord-config";
 import { noticeKeyboard } from "./notice-pages";
 import type { Env } from "./types";
 
@@ -10,20 +12,6 @@ interface DiscordDelivery {
 }
 
 type DeliveryResult = { sent: true } | { sent: false; retrySeconds: number; rateLimited?: boolean };
-
-export function discordWebhookEndpoint(value?: string): URL | null {
-  if (!value) return null;
-  try {
-    const url = new URL(value);
-    if (url.origin !== "https://discord.com" || url.username || url.password || url.search || url.hash ||
-        !/^\/api\/(?:v10\/)?webhooks\/\d{17,20}\/[A-Za-z0-9_-]+$/.test(url.pathname)) return null;
-    url.searchParams.set("wait", "true");
-    url.searchParams.set("with_components", "true");
-    return url;
-  } catch {
-    return null;
-  }
-}
 
 export function discordNoticeMessage(env: Env, notice: Pick<DiscordDelivery, "title" | "link" | "published_at">) {
   const published = notice.published_at ? { description: "게시: " + notice.published_at } : {};
@@ -42,16 +30,13 @@ function safeDelaySeconds(value: number): number {
 }
 
 export async function deliverDiscordNotice(
-  endpoint: URL, env: Env, notice: DiscordDelivery,
+  config: DiscordConfig, env: Env, notice: DiscordDelivery,
 ): Promise<DeliveryResult> {
   try {
-    const response = await fetch(endpoint, {
+    const response = await discordApi("/channels/" + config.noticeChannelId + "/messages", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(discordNoticeMessage(env, notice)),
-      redirect: "manual",
-      signal: AbortSignal.timeout(8000),
-    });
+    }, config.botToken);
     if (response.ok) {
       await response.body?.cancel().catch(() => {});
       return { sent: true };
@@ -70,36 +55,38 @@ export async function deliverDiscordNotice(
     console.warn("Discord notice delivery returned HTTP", response.status, notice.notice_id);
     if (response.status < 500) return { sent: false, retrySeconds: 3600 };
   } catch {
-    // Fetch errors can include the URL, which contains the webhook token.
     console.warn("Discord notice delivery could not reach the endpoint", notice.notice_id);
   }
   return { sent: false, retrySeconds: Math.min(3600, 60 * 2 ** Math.min(notice.attempts, 6)) };
 }
 
 export async function processDiscordNotices(env: Env, startedAt: string): Promise<void> {
-  const endpoint = discordWebhookEndpoint(env.DISCORD_WEBHOOK_URL);
-  if (!endpoint) {
-    if (env.DISCORD_WEBHOOK_URL) console.warn("DISCORD_WEBHOOK_URL is not a Discord incoming webhook");
-    return;
-  }
+  const config = discordConfig(env);
+  if (!config) return;
 
   // Start at activation. If this is the first RSS run, ignore the initial RSS seed too.
   await env.DB.prepare(
-    "INSERT OR IGNORE INTO bot_state (key, value) VALUES ('discord_started_at', ?1)",
+    "INSERT OR IGNORE INTO bot_state (key, value) VALUES ('discord_subscription_started_at', ?1)",
   ).bind(startedAt).run();
   await env.DB.prepare(
     "INSERT OR IGNORE INTO discord_deliveries (notice_id, next_attempt_at) " +
     "SELECT n.notice_id, n.discovered_at FROM notices n " +
-    "WHERE n.discovered_at >= (SELECT value FROM bot_state WHERE key = 'discord_started_at') " +
+    "WHERE n.discovered_at >= (SELECT value FROM bot_state WHERE key = 'discord_subscription_started_at') " +
     "AND n.discovered_at > (SELECT value FROM bot_state WHERE key = 'rss_initialized')",
   ).run();
   const due = await env.DB.prepare(
     "SELECT d.notice_id, n.title, n.link, n.published_at, d.attempts " +
     "FROM discord_deliveries d JOIN notices n USING (notice_id) " +
     "WHERE d.sent_at IS NULL AND d.next_attempt_at <= ?1 " +
+    "AND n.discovered_at >= (SELECT value FROM bot_state WHERE key = 'discord_subscription_started_at') " +
     "AND COALESCE((SELECT value FROM bot_state WHERE key = 'discord_retry_until'), '') <= ?1 " +
     "ORDER BY d.next_attempt_at, d.notice_id LIMIT 3",
   ).bind(new Date().toISOString()).all<DiscordDelivery>();
+  if (!due.results.length) return;
+  if (!await approvedNoticeChannel(config)) {
+    console.warn("Discord notices paused: channel privacy check failed.");
+    return;
+  }
   for (const notice of due.results) {
     const now = new Date().toISOString();
     // Claim before sending; the lease expires if the Worker is interrupted.
@@ -108,7 +95,7 @@ export async function processDiscordNotices(env: Env, startedAt: string): Promis
       "WHERE notice_id = ?2 AND attempts = ?3 AND sent_at IS NULL AND next_attempt_at <= ?4",
     ).bind(new Date(Date.now() + 120_000).toISOString(), notice.notice_id, notice.attempts, now).run();
     if (claim.meta.changes !== 1) continue;
-    const result = await deliverDiscordNotice(endpoint, env, notice);
+    const result = await deliverDiscordNotice(config, env, notice);
     if (result.sent) {
       await env.DB.prepare("UPDATE discord_deliveries SET sent_at = ?1 WHERE notice_id = ?2")
         .bind(new Date().toISOString(), notice.notice_id).run();

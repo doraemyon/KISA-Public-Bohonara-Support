@@ -1,5 +1,7 @@
+import { renderSVG } from "uqr";
 import { APPLICATION_COMMAND } from "./access";
 import { NOTICE_ICON_PATH, publicSiteUrl, required } from "./config";
+import { discordConfig } from "./discord-config";
 import { renderSiteHeader, SITE_SHELL_STYLESHEET } from "./site-header";
 import { renderTelegramQr } from "./telegram-qr";
 import type { Env } from "./types";
@@ -28,6 +30,8 @@ export function renderOnboardingPage(env: Env): string {
   const safeBotLink = escapeHtml(botLink);
   const safeBotUsername = escapeHtml(botUsername);
   const canonical = publicSiteUrl(env);
+  const discord = discordConfig(env);
+  const discordCard = renderDiscordCard(discord?.inviteUrl);
 
   return `<!doctype html>
 <html lang="ko">
@@ -35,8 +39,8 @@ export function renderOnboardingPage(env: Env): string {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="index,follow">
-  <meta name="description" content="KISA 보호나라 보안공지의 텔레그램 알림을 신청하세요. 새 공지와 국문·영문 문서를 안내하는 비공식 서비스입니다.">
-  <title>비공식 KISA 보호나라 보안공지 | 텔레그램 알림 신청</title>
+  <meta name="description" content="KISA 보호나라 보안공지의 Telegram 및 Discord 알림을 신청하세요. 새 공지와 국문·영문 문서를 안내하는 비공식 서비스입니다.">
+  <title>비공식 KISA 보호나라 보안공지 | 알림 신청</title>
   ${canonical ? `<link rel="canonical" href="${escapeHtml(canonical.href)}">` : ""}
   <link rel="icon" type="image/png" href="${NOTICE_ICON_PATH}">
   ${SITE_SHELL_STYLESHEET}
@@ -45,6 +49,14 @@ export function renderOnboardingPage(env: Env): string {
     a { color:inherit; }
     main { word-break:keep-all; }
     .intro { text-align:center; }
+    .signup-nav { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; margin:20px 0 0; }
+    .signup-nav a { padding:6px 12px; border:1px solid var(--border); border-radius:6px; font-size:13px; font-weight:600; text-decoration:none; }
+    .signup-nav a:hover { background:var(--panel); }
+    .discord-layout { margin-top:40px; padding-top:32px; border-top:1px solid var(--border); }
+    .button.discord { background:#454fbf; }
+    .button.discord:hover { background:#515ed5; }
+    .discord-status { margin:40px auto 0; max-width:720px; padding-top:20px; border-top:1px solid var(--border); text-align:center; }
+    .discord-status p { color:var(--muted); font-size:14px; }
     .layout { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); align-items:center; gap:48px; margin-top:36px; }
     .signup-steps, .card { width:min(100%,360px); justify-self:center; }
     .eyebrow { margin:0 0 12px; color:#58a6ff; font-size:13px; font-weight:600; }
@@ -80,11 +92,15 @@ export function renderOnboardingPage(env: Env): string {
     <header class="intro">
       <p class="eyebrow">비공식 KISA 보호나라 보안공지</p>
       <h1>보호나라 보안공지를 놓치지 마세요.</h1>
-      <p class="lead">KISA 보호나라에 새 보안공지가 등록되면 텔레그램 개인 메시지로 전달합니다.<br>가입 신청 후 관리자 승인이 완료되면 별도 설정 없이 알림이 시작됩니다.</p>
+      <p class="lead">KISA 보호나라에 새 보안공지가 등록되면 알림을 보내드립니다.<br>Telegram 또는 Discord에서 구독을 신청하고 관리자 승인을 받으세요.</p>
+      <nav class="signup-nav" aria-label="알림 구독 방법">
+        <a href="#telegram">Telegram</a>
+        <a href="#discord">Discord</a>
+      </nav>
     </header>
-    <div class="layout">
+    <div class="layout" id="telegram">
       <section class="signup-steps" aria-labelledby="signup-steps-title">
-        <h2 class="steps-title" id="signup-steps-title">가입 방법</h2>
+        <h2 class="steps-title" id="signup-steps-title">Telegram 가입 방법</h2>
         <ol class="steps" role="list">
           <li class="step">
             <span class="step__number" aria-hidden="true">1</span>
@@ -120,11 +136,49 @@ export function renderOnboardingPage(env: Env): string {
         <p class="fineprint">성명과 Telegram 프로필 정보는 관리자 승인에 사용되며, 승인 또는 거절 시 신청 데이터베이스에서 삭제됩니다.</p>
       </aside>
     </div>
+    ${discordCard}
     <footer class="notice" aria-label="서비스 및 라이선스 안내">
-      <p>본 서비스는 수익 목적 없이 운영하는 비상업적 프로젝트이며, KISA와 별개로 운영되는 독립적인 비공식 알리미 서비스입니다.<br>한국인터넷진흥원(KISA)이 제공하는 <a href="https://www.boho.or.kr/kr/rss.do?bbsId=B0000133">보호나라 보안공지 RSS</a>를 활용해 새 공지를 Telegram으로 전달합니다.</p>
+      <p>본 서비스는 수익 목적 없이 운영하는 비상업적 프로젝트이며, KISA와 별개로 운영되는 독립적인 비공식 알리미 서비스입니다.<br>한국인터넷진흥원(KISA)이 제공하는 <a href="https://www.boho.or.kr/kr/rss.do?bbsId=B0000133">보호나라 보안공지 RSS</a>를 활용해 새 공지 알림을 전달합니다.</p>
       <p>© 2026 · MIT License</p>
     </footer>
   </main>
 </body>
 </html>`;
+}
+
+function renderDiscordCard(invite: string | undefined): string {
+  if (!invite) {
+    return `<section class="discord-status" id="discord" aria-labelledby="discord-title">
+      <h2 class="steps-title" id="discord-title">Discord 가입</h2>
+      <p>Discord 구독 신청은 연결 준비 중입니다.</p>
+    </section>`;
+  }
+  return `<section class="layout discord-layout" id="discord" aria-labelledby="discord-title">
+      <div class="signup-steps">
+        <h2 class="steps-title" id="discord-title">Discord 가입 방법</h2>
+        <ol class="steps" role="list">
+          <li class="step">
+            <span class="step__number" aria-hidden="true">1</span>
+            <div><strong class="step__title">Discord 서버 들어가기</strong>
+              <p class="step__detail">QR을 스캔하거나 <strong>Discord에서 신청</strong>을 누릅니다.</p></div>
+          </li>
+          <li class="step">
+            <span class="step__number" aria-hidden="true">2</span>
+            <div><strong class="step__title">알림 구독 신청하기</strong>
+              <p class="step__detail">가입 신청 채널에서 <strong>/알림신청</strong>을 실행하고 <strong>성명</strong>을 입력하세요.</p></div>
+          </li>
+          <li class="step">
+            <span class="step__number" aria-hidden="true">3</span>
+            <div><strong class="step__title">관리자 승인 기다리기</strong>
+              <p class="step__detail">승인되면 비공개 보안공지 채널이 표시됩니다. 푸시가 필요하면 채널 알림을 <strong>모든 메시지</strong>로 설정하세요.</p></div>
+          </li>
+        </ol>
+      </div>
+      <aside class="card" aria-label="Discord 가입 신청">
+        <div class="qr" role="img" aria-label="Discord 가입 QR 코드">${renderSVG(invite, { border: 4, ecc: "M" })}</div>
+        <h2>Discord에서 신청</h2>
+        <a class="button discord" href="${escapeHtml(invite)}">Discord에서 신청</a>
+        <p class="fineprint">성명은 관리자 승인에만 사용되며 신청 처리 후 삭제됩니다.</p>
+      </aside>
+    </section>`;
 }

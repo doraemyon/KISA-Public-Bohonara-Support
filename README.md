@@ -1,12 +1,12 @@
-# KISA 승인형 Telegram 알림 봇
+# KISA 승인형 Telegram · Discord 알림
 
-KISA 보호나라 보안공지를 Telegram 개인 메시지로 전달하는 소규모 승인형 알림 서비스입니다. 공개 가입 페이지의 QR로 봇을 열고 본인의 성명을 제출하면 관리자가 가입 신청을 검토합니다. Telegram bot token과 관리자 ID는 Cloudflare Worker Secret으로 관리합니다. 신청·구독 데이터는 공개 저장소에 넣지 않습니다.
+KISA 보호나라 보안공지를 Telegram 개인 메시지와 Discord 비공개 채널로 전달하는 승인형 알림 서비스입니다. 공개 가입 페이지의 QR로 봇을 열고 본인의 성명을 제출하면 관리자가 가입 신청을 검토합니다. Telegram bot token과 관리자 ID는 Cloudflare Worker Secret으로 관리합니다. 신청·구독 데이터는 공개 저장소에 넣지 않습니다.
 
-[비공식 KISA 보호나라 보안공지 텔레그램 알림 신청](https://notice.bohonara.workers.dev/)
+[비공식 KISA 보호나라 보안공지 알림 신청](https://notice.bohonara.workers.dev/)
 
 ## 주요 기능
 
-- 반응형 가입 안내 페이지와 Telegram QR
+- 반응형 가입 안내 페이지와 Telegram·Discord QR
 - 관리자 개인 Telegram의 가입 승인·거절 버튼
 - 시간당 신청·승인 대기·구독자 수 상한
 - 일회용·다회용 만료 초대 링크도 보조 수단으로 유지
@@ -21,11 +21,38 @@ KISA 보호나라 보안공지를 Telegram 개인 메시지로 전달하는 소�
 
 ```text
 GitHub Public 저장소 ──배포──> Cloudflare Worker
-                                  ├─ 공개 가입 페이지 + Telegram QR
-                                  ├─ Telegram Webhook + 관리자 승인
+                                  ├─ 공개 가입 페이지 + Telegram·Discord QR
+                                  ├─ Telegram·Discord 구독 신청과 관리자 승인
                                   ├─ KISA RSS 1분 확인
                                   └─ Cloudflare D1 (비공개 신청·구독 정보)
 ```
+
+## 공지 감지부터 번역·게시까지
+
+```mermaid
+flowchart TD
+    A(["KISA에서 공지 등록"]) --> B["Worker가 RSS 확인 · 예약 작업이 누락 공지 보완"]
+    B --> C{"새 공지 또는 미게시 문서인가?"}
+    C -->|NO| D(["다음 확인까지 대기"])
+    C -->|YES| E["KISA 원문을 읽고 국문 문서 생성"]
+    E --> F["영문 번역 · Cloudflare 번역이 설정돼 있으면 먼저 시도, 이어서 Google"]
+    F --> G{"번역이 검증을 통과했나?"}
+    G -->|YES| L["국문·영문 문서를 함께 D1에 게시"]
+    G -->|NO| H["Gemini 시도 · 키가 등록된 경우"]
+    H --> I{"번역이 검증을 통과했나?"}
+    I -->|YES| L
+    I -->|NO| J["MyMemory → 오프라인 OPUS-MT"]
+    J --> K{"번역이 검증을 통과했나?"}
+    K -->|YES| L
+    K -->|NO| M["복구 큐에 넣고 다음 예약 실행에서 재시도"]
+    M --> E
+    L --> N(["공개 목록에서 국문·영문 열람, 복사, 다운로드"])
+    B --> O{"RSS에서 새 공지를 감지했나?"}
+    O -->|YES| P["승인된 Telegram 구독자와 Discord 비공개 채널에 알림"]
+    O -->|NO| D
+```
+
+검증은 문서의 제목·요약·본문과 CVE 번호, 버전, 링크 등 핵심 정보가 보존됐는지 확인합니다. 알림은 문서 게시와 별도로 발송되며, 문서가 준비되는 동안 국문·영문 링크에는 준비 상태가 표시됩니다.
 
 ## 가입 신청과 접근 통제
 
@@ -89,11 +116,33 @@ Remove-Item Env:TELEGRAM_BOT_TOKEN
 
 스크립트가 bot token 검증, 봇 사용자 이름 조회, 명령어·설명 등록, 관리자 숫자 ID 확인과 webhook secret 생성을 처리합니다. 출력된 `BOT_USERNAME`, `ADMIN_TELEGRAM_USER_ID`, `TELEGRAM_WEBHOOK_SECRET`은 다음 설정에 사용합니다.
 
-### 선택: Discord 채널에 공지 받기
+### 선택: Discord 알림 구독 연결
 
-1. Discord 서버의 **서버 설정 → 연동 → 웹후크**에서 텍스트 채널용 웹후크를 만들고 URL을 복사합니다. 이 작업에는 웹후크 관리 권한이 필요합니다.
-2. Cloudflare의 `notice` Worker **Settings → Variables and Secrets → Add**에서 `DISCORD_WEBHOOK_URL`을 **Secret**으로 등록하고 배포합니다. 웹후크 URL은 채널에 글을 쓸 수 있는 자격 증명이므로 저장소나 채팅에 올리지 않습니다.
-3. 연결 후 새로 감지되는 공지는 기존 Telegram 구독자와 지정한 Discord 채널에 전송됩니다. 공지 원문과 국문·영문 링크가 제공됩니다. 별도 Discord 봇이나 서버는 필요하지 않습니다. 개인만 받으려면 비공개 텍스트 채널을 선택하세요.
+Discord 가입 페이지의 QR은 서버의 가입 신청 채널로 연결합니다. 신청자는 `/알림신청 성명`으로 신청하고, 설정에 등록되고 역할 관리 권한이 있는 관리자는 `/알림관리`에서 비공개로 승인하거나 거절합니다. 승인되면 `공지 구독자` 역할로 비공개 알림 채널을 볼 수 있습니다. 관리자가 역할을 제거하면 채널 접근이 해제됩니다. 공개 공지 목록과 국문·영문 문서는 웹에서 계속 열 수 있습니다.
+
+1. [Discord Developer Portal](https://discord.com/developers/applications)에서 전용 애플리케이션을 생성합니다. General Information의 **Application ID**, **Public Key**, Bot 탭의 **Token**을 확인합니다. Guild Install에 `bot`과 `applications.commands` 범위 및 **Manage Roles** 권한을 설정해 대상 서버에 설치합니다. 서버 권한을 모두 끈 일반 역할로 `공지 구독자` 역할을 만들고 봇의 서버 역할을 그 위에 둡니다.
+2. Discord 서버에 `#가입신청` 텍스트 채널을 만들고 사용할 서버 초대 URL을 복사합니다. 채널에서 일반 멤버에게 **애플리케이션 명령 사용**을 허용합니다. 별도 일반 텍스트 채널 `#보안공지`는 비공개로 만들고 `@everyone`의 **채널 보기**를 거부합니다. `공지 구독자` 역할에는 **채널 보기**와 **메시지 기록 읽기**를 허용하고 **메시지 보내기**를 거부합니다. 봇 **계정**을 채널 멤버로 추가해 **채널 보기**, **메시지 보내기**, **링크 임베드**를 허용합니다. 다른 역할이나 일반 멤버에 채널 보기 허용을 추가하지 마세요.
+3. Discord의 개발자 모드를 켜고 관리자 계정, 서버, 신청 채널, 보안공지 채널, 구독자 역할의 ID를 복사합니다. 아래 PowerShell을 운영 Worker의 Wrangler 설정이 있는 저장소에서 실행합니다. URL은 `#가입신청`에서 만든 초대 URL입니다. 스크립트는 채널을 검증하고 명령을 추가한 뒤 Cloudflare Worker **Secret**에 설정을 저장합니다.
+
+   ```powershell
+   $discordSettings = @{
+       applicationId = 'Discord Application ID'
+       publicKey = 'Discord Public Key'
+       adminUserId = '승인 관리자 Discord 사용자 ID'
+       guildId = 'Discord 서버 ID'
+       requestChannelId = '가입신청 채널 ID'
+       noticeChannelId = '보안공지 채널 ID'
+       subscriberRoleId = '공지 구독자 역할 ID'
+       inviteUrl = 'https://discord.gg/초대코드'
+       botToken = [System.Net.NetworkCredential]::new('', (Read-Host 'Discord Bot Token' -AsSecureString)).Password
+   }
+   $discordSettings | ConvertTo-Json -Compress | node scripts/setup-discord.mjs
+   Remove-Variable discordSettings
+   ```
+
+4. Developer Portal의 **General Information → Interactions Endpoint URL**에 `https://notice.bohonara.workers.dev/discord/interactions`을 저장합니다. 공개 가입 페이지에서 QR이 표시되는지 확인한 후, 일반 계정으로 신청하고 관리자 계정에서 승인해 채널 접근을 확인합니다. Discord 푸시 알림은 구독자가 채널의 알림을 **모든 메시지**로 설정할 수 있습니다.
+
+Discord 봇 토큰은 Cloudflare Worker Secret `DISCORD_SUBSCRIPTION`에 보관합니다. Discord 상호작용은 공개 키로 서명을 검증합니다. 신청 성명은 승인 또는 거절 시 삭제하고 오래된 미처리 신청은 30일 후 정리합니다. Discord 서버 소유자와 관리자 권한 보유자는 Discord 권한 모델에 따라 채널을 관리할 수 있습니다.
 
 ## 2. Cloudflare D1 만들기
 
