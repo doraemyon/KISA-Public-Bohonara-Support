@@ -59,6 +59,15 @@ export function renderOnboardingPage(env: Env): string {
     #choose-discord:focus-visible ~ .signup-nav label[for="choose-discord"] { outline:2px solid #58a6ff; outline-offset:2px; }
     #choose-telegram:checked ~ .signup-panels #discord,
     #choose-discord:checked ~ .signup-panels #telegram { display:none; }
+    @media (prefers-reduced-motion: no-preference) {
+      .signup-nav label { transition:background-color 150ms ease, border-color 150ms ease, color 150ms ease; }
+      #choose-telegram:checked ~ .signup-panels #telegram,
+      #choose-discord:checked ~ .signup-panels #discord { animation:signup-panel-enter 180ms ease-out; }
+    }
+    @keyframes signup-panel-enter {
+      from { opacity:0; transform:translateY(5px); }
+      to { opacity:1; transform:translateY(0); }
+    }
     .button.discord { background:#454fbf; }
     .button.discord:hover { background:#515ed5; }
     .discord-status { margin:36px auto 0; max-width:720px; padding-top:20px; text-align:center; }
