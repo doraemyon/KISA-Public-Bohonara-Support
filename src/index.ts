@@ -532,7 +532,7 @@ export default {
     if (request.method === "GET" && url.pathname === "/healthz") {
       return jsonResponse({ ok: true, version: VERSION });
     }
-    if (url.pathname === DISCORD_AUTH_PATH && (request.method === "GET" || request.method === "POST")) {
+    if (request.method === "GET" && url.pathname === DISCORD_AUTH_PATH) {
       return startDiscordSignup(request, env);
     }
     if (request.method === "GET" && url.pathname === DISCORD_CALLBACK_PATH) {

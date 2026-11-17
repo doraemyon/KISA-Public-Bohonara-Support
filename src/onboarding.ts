@@ -159,13 +159,13 @@ function renderDiscordCard(signupUrl: string | undefined): string {
         <ol class="steps" role="list">
           <li class="step">
             <span class="step__number" aria-hidden="true">1</span>
-            <div><strong class="step__title">가입 신청 열기</strong>
+            <div><strong class="step__title">Discord 연결 화면 열기</strong>
               <p class="step__detail">QR을 스캔하거나 <strong>Discord에서 신청</strong>을 누릅니다.</p></div>
           </li>
           <li class="step">
             <span class="step__number" aria-hidden="true">2</span>
             <div><strong class="step__title">알림 구독 신청하기</strong>
-              <p class="step__detail">성명을 입력한 뒤 Discord 인증 화면에서 <strong>본인이 관리하는 비공개 채널</strong>을 선택하세요.</p></div>
+              <p class="step__detail">Discord에서 <strong>본인이 관리하는 비공개 채널</strong>을 선택하고 연결을 허용하세요.</p></div>
           </li>
           <li class="step">
             <span class="step__number" aria-hidden="true">3</span>
@@ -178,7 +178,7 @@ function renderDiscordCard(signupUrl: string | undefined): string {
         <div class="qr" role="img" aria-label="Discord 가입 QR 코드">${renderSVG(signupUrl, { border: 4, ecc: "M" })}</div>
         <h2>Discord에서 신청</h2>
         <a class="button discord" href="${escapeHtml(signupUrl)}">Discord에서 신청</a>
-        <p class="fineprint">성명은 관리자 승인에만 사용되며 신청 처리 후 삭제됩니다.</p>
+        <p class="fineprint">Discord 계정 이름은 승인에 사용되며 신청 처리 후 삭제됩니다.</p>
       </aside>
     </section>`;
 }

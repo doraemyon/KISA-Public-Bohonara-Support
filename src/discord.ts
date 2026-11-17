@@ -12,7 +12,7 @@ interface Delivery {
 
 async function sendRequest(env: Env, admin: string, row: Pending): Promise<void> {
   await sendTelegramMessage(env, admin, [
-    "[Discord 알림 구독 신청]", "신청 번호: " + row.id, "성명: " + row.name,
+    "[Discord 알림 구독 신청]", "신청 번호: " + row.id, "Discord 계정: " + row.name,
     "Discord 사용자 ID: " + row.discord_user_id, "접수: " + row.requested_at,
   ].join("\n"), [[
     { text: "승인", callback_data: "discord:approve:" + row.id },

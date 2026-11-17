@@ -1,8 +1,7 @@
 import { sha256 } from "./access";
-import { parseApplicantName } from "./applications";
-import { maxPendingApplications, publicSiteUrl } from "./config";
+import { maxPendingApplications } from "./config";
 import {
-  DISCORD_AUTH_PATH, DISCORD_ORIGIN, discordApi, discordId, discordSignupConfig, isDiscordWebhook,
+  DISCORD_ORIGIN, discordApi, discordId, discordSignupConfig, isDiscordWebhook,
   removeWebhook, sealWebhook, toHex,
 } from "./discord-connection";
 import type { Env } from "./types";
@@ -10,23 +9,18 @@ import type { Env } from "./types";
 const COOKIE_NAME = "__Host-discord-signup";
 const STATE_TTL_SECONDS = 600;
 
-function signupPage(title: string, detail: string, status: number, form = false, clearCookie = false): Response {
+function signupPage(title: string, detail: string, status: number, clearCookie = false): Response {
   const headers = new Headers({
     "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "Referrer-Policy": "no-referrer",
-    "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; form-action 'self' https://discord.com; base-uri 'none'; frame-ancestors 'none'",
+    "X-Robots-Tag": "noindex",
+    "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'",
   });
   if (clearCookie) headers.set("Set-Cookie", COOKIE_NAME + "=; Secure; HttpOnly; SameSite=Lax; Path=/; Max-Age=0");
-  const fields = form ? '<form method="post" action="' + DISCORD_AUTH_PATH + '">' +
-    '<label for="name">성명</label><input id="name" name="name" maxlength="48" required autocomplete="name">' +
-    '<label class="check"><input type="checkbox" name="private" required> 알림을 받을 비공개 채널을 선택하겠습니다.</label>' +
-    '<button type="submit">Discord에서 채널 선택</button></form>' : "";
   return new Response('<!doctype html><html lang="ko"><head><meta charset="utf-8">' +
     '<meta name="viewport" content="width=device-width,initial-scale=1"><title>Discord 보안공지 신청</title>' +
     '<style>body{margin:0;background:#0d1117;color:#f0f6fc;font:16px/1.6 system-ui,sans-serif}' +
-    'main{max-width:480px;margin:8vh auto;padding:24px}h1{font-size:26px}p{color:#aab4c1}form{display:grid;gap:12px;margin:24px 0}' +
-    'input:not([type=checkbox]){box-sizing:border-box;width:100%;padding:10px;background:#161b22;color:inherit;border:1px solid #4c5665;border-radius:6px}' +
-    '.check{color:#d4dded}button{font:inherit;color:white;background:#454fbf;padding:10px;border:0;border-radius:6px;cursor:pointer}a{color:#8dc2ff}</style>' +
-    '</head><body><main><h1>' + title + '</h1><p>' + detail + '</p>' + fields +
+    'main{max-width:480px;margin:8vh auto;padding:24px}h1{font-size:26px}p{color:#aab4c1}a{color:#8dc2ff}</style>' +
+    '</head><body><main><h1>' + title + '</h1><p>' + detail + '</p>' +
     '<a href="/">가입 페이지로 돌아가기</a></main></body></html>', { status, headers });
 }
 
@@ -35,43 +29,16 @@ type SignupConfig = NonNullable<ReturnType<typeof discordSignupConfig>>;
 export async function startDiscordSignup(request: Request, env: Env): Promise<Response> {
   const config = discordSignupConfig(env);
   if (!config) return signupPage("Discord 연결 준비 중", "연결이 완료되면 이 페이지에서 알림을 신청할 수 있습니다.", 503);
-  if (request.method === "GET") {
-    return signupPage("Discord 알림 신청", "관리자가 확인할 성명을 입력하고, Discord에서 본인이 관리하는 비공개 텍스트 채널을 선택하세요.", 200, true);
-  }
-  const origin = publicSiteUrl(env)?.origin;
-  if (request.headers.get("Origin") !== origin ||
-      !request.headers.get("Content-Type")?.startsWith("application/x-www-form-urlencoded")) {
-    return signupPage("신청을 시작할 수 없음", "가입 페이지에서 다시 시도해 주세요.", 403);
-  }
-  const reader = request.body?.getReader();
-  let raw = "";
-  const decoder = new TextDecoder();
-  let size = 0;
-  if (reader) {
-    for (;;) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      size += value.length;
-      if (size > 4096) {
-        await reader.cancel();
-        return signupPage("입력이 너무 김", "성명만 입력하고 다시 시도해 주세요.", 413, true);
-      }
-      raw += decoder.decode(value, { stream: true });
-    }
-    raw += decoder.decode();
-  }
-  const form = new URLSearchParams(raw);
-  const name = parseApplicantName((form.get("name") ?? "").trim().split(/\s+/));
-  if (!name || form.get("private") !== "on") {
-    return signupPage("신청 정보 확인", "성명을 입력하고 비공개 채널 선택에 체크해 주세요.", 400, true);
+  if (/\bprefetch\b/i.test(request.headers.get("Sec-Purpose") ?? request.headers.get("Purpose") ?? "")) {
+    return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
   }
   const state = toHex(crypto.getRandomValues(new Uint8Array(32)));
   const now = Date.now();
   const stored = await env.DB.prepare(
-    "INSERT INTO discord_signup_states (state_hash, name, expires_at) SELECT ?1, ?2, ?3 " +
-    "WHERE (SELECT COUNT(*) FROM discord_signup_states WHERE expires_at > ?4) < 100",
-  ).bind(await sha256(state), name, new Date(now + STATE_TTL_SECONDS * 1000).toISOString(), new Date(now).toISOString()).run();
-  if (stored.meta.changes !== 1) return signupPage("신청 대기 중", "잠시 후 다시 시도해 주세요.", 429, true);
+    "INSERT INTO discord_signup_states (state_hash, expires_at) SELECT ?1, ?2 " +
+    "WHERE (SELECT COUNT(*) FROM discord_signup_states WHERE expires_at > ?3) < 100",
+  ).bind(await sha256(state), new Date(now + STATE_TTL_SECONDS * 1000).toISOString(), new Date(now).toISOString()).run();
+  if (stored.meta.changes !== 1) return signupPage("신청 대기 중", "잠시 후 다시 시도해 주세요.", 429);
   const authorize = new URL("/oauth2/authorize", DISCORD_ORIGIN);
   authorize.search = new URLSearchParams({
     client_id: config.clientId, redirect_uri: config.redirect, response_type: "code",
@@ -86,7 +53,7 @@ export async function startDiscordSignup(request: Request, env: Env): Promise<Re
   });
 }
 
-async function registerChannel(env: Env, config: SignupConfig, code: string, name: string): Promise<Response> {
+async function registerChannel(env: Env, config: SignupConfig, code: string): Promise<Response> {
   const token = await discordApi("/oauth2/token", {
     method: "POST",
     body: new URLSearchParams({
@@ -103,19 +70,25 @@ async function registerChannel(env: Env, config: SignupConfig, code: string, nam
     if (typeof data.access_token !== "string") throw new Error("Missing Discord access token");
     const current = await discordApi("/users/@me", { headers: { Authorization: "Bearer " + data.access_token } });
     if (!current.ok) throw new Error("Discord identity lookup failed");
-    const identity = await current.json<{ id?: string }>();
+    const identity = await current.json<{ id?: string; username?: string; global_name?: string }>();
     if (!discordId(identity.id)) throw new Error("Invalid Discord user");
+    const username = typeof identity.username === "string" && /^[a-z0-9_.]{2,32}$/i.test(identity.username)
+      ? "@" + identity.username : "";
+    const displayName = typeof identity.global_name === "string"
+      ? Array.from(identity.global_name.replace(/\p{C}/gu, "").replace(/\s+/g, " ").trim()).slice(0, 32).join("")
+      : "";
+    const label = [displayName, username].filter(Boolean).join(" ") || identity.id;
     const now = new Date().toISOString();
     const result = await env.DB.prepare(
       "INSERT INTO discord_webhook_subscriptions (discord_user_id, channel_id, sealed_webhook, name, requested_at, notify_after) " +
       "SELECT ?1, ?2, ?3, ?4, ?5, ?5 " +
       "WHERE (SELECT COUNT(*) FROM discord_webhook_subscriptions WHERE approved_at IS NULL) < ?6 " +
       "ON CONFLICT DO NOTHING",
-    ).bind(identity.id, hook.channel_id, await sealWebhook(hook, config.key), name, now, maxPendingApplications(env)).run();
+    ).bind(identity.id, hook.channel_id, await sealWebhook(hook, config.key), label, now, maxPendingApplications(env)).run();
     saved = result.meta.changes === 1;
     return saved
-      ? signupPage("알림 신청 접수", "관리자가 승인하면 선택한 Discord 채널에서 이후 등록되는 보안공지를 받습니다.", 200, false, true)
-      : signupPage("알림 신청을 추가할 수 없음", "이미 신청한 계정이나 채널인지 확인해 주세요. 신규 신청 한도에 도달한 경우 나중에 다시 시도할 수 있습니다.", 409, false, true);
+      ? signupPage("알림 신청 접수", "관리자가 승인하면 선택한 Discord 채널에서 이후 등록되는 보안공지를 받습니다.", 200, true)
+      : signupPage("알림 신청을 추가할 수 없음", "이미 신청한 계정이나 채널인지 확인해 주세요. 신규 신청 한도에 도달한 경우 나중에 다시 시도할 수 있습니다.", 409, true);
   } finally {
     if (!saved) await removeWebhook(hook);
   }
@@ -133,17 +106,17 @@ export async function completeDiscordSignup(request: Request, env: Env): Promise
     return signupPage("신청을 확인할 수 없음", "가입 페이지에서 다시 신청해 주세요.", 403);
   }
   const record = await env.DB.prepare(
-    "DELETE FROM discord_signup_states WHERE state_hash = ?1 AND expires_at > ?2 RETURNING name",
-  ).bind(await sha256(state), new Date().toISOString()).first<{ name: string }>();
-  if (!record) return signupPage("신청 시간이 만료됨", "가입 페이지에서 다시 신청해 주세요.", 400, false, true);
+    "DELETE FROM discord_signup_states WHERE state_hash = ?1 AND expires_at > ?2 RETURNING state_hash",
+  ).bind(await sha256(state), new Date().toISOString()).first<{ state_hash: string }>();
+  if (!record) return signupPage("신청 시간이 만료됨", "가입 페이지에서 다시 신청해 주세요.", 400, true);
   const code = params.get("code");
   if (!code || code.length > 512 || params.has("error")) {
-    return signupPage("채널 연결 취소", "Discord에 알림을 받으려면 채널 선택을 완료해 주세요.", 400, false, true);
+    return signupPage("채널 연결 취소", "Discord에 알림을 받으려면 채널 선택을 완료해 주세요.", 400, true);
   }
   try {
-    return await registerChannel(env, config, code, record.name);
+    return await registerChannel(env, config, code);
   } catch {
     console.error("Discord OAuth signup could not be completed.");
-    return signupPage("채널 연결 실패", "Discord 채널 권한을 확인한 뒤 다시 신청해 주세요.", 502, false, true);
+    return signupPage("채널 연결 실패", "Discord 채널 권한을 확인한 뒤 다시 신청해 주세요.", 502, true);
   }
 }

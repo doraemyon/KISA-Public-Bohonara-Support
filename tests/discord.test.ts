@@ -27,13 +27,10 @@ it("renders a QR for the signup page only when OAuth settings are available", ()
 
 it("redeems a same-browser state once and stores only an encrypted webhook for review", async () => {
   const insert = vi.fn(async () => ({ meta: { changes: 1 } }));
-  const consume = vi.fn().mockResolvedValueOnce({ name: "김하늘" }).mockResolvedValue(null);
+  const consume = vi.fn().mockResolvedValueOnce({ state_hash: "used" }).mockResolvedValue(null);
   const bind = vi.fn(() => ({ first: consume, run: insert }));
   const live = { ...env, DB: { prepare: () => ({ bind }) } as unknown as D1Database };
-  const go = await startDiscordSignup(new Request(origin + "/discord/subscribe", {
-    method: "POST", headers: { Origin: origin },
-    body: new URLSearchParams({ name: "김하늘", private: "on" }),
-  }), live);
+  const go = await startDiscordSignup(new Request(origin + "/discord/subscribe"), live);
   expect(go.status).toBe(303);
   const auth = new URL(go.headers.get("Location")!);
   expect(auth.origin).toBe("https://discord.com");
@@ -45,7 +42,7 @@ it("redeems a same-browser state once and stores only an encrypted webhook for r
 
   const network = vi.fn(async (url: string) => url.endsWith("/oauth2/token")
     ? Response.json({ webhook: hook, access_token: "short-lived-access" })
-    : Response.json({ id: "123456789012345676" }));
+    : Response.json({ id: "123456789012345676", username: "haneul", global_name: "김하늘" }));
   vi.stubGlobal("fetch", network);
   expect((await completeDiscordSignup(new Request(callbackUrl), live)).status).toBe(403);
   expect(network).not.toHaveBeenCalled();
@@ -54,7 +51,7 @@ it("redeems a same-browser state once and stores only an encrypted webhook for r
   expect(network).toHaveBeenCalledTimes(2);
   const [, channelId, sealed, name] = bind.mock.calls.at(-2) as unknown as string[];
   expect(channelId).toBe(hook.channel_id);
-  expect(name).toBe("김하늘");
+  expect(name).toBe("김하늘 @haneul");
   expect(sealed).not.toContain(hook.token);
   expect(await openWebhook(sealed, env.DISCORD_WEBHOOK_KEY!)).toEqual(hook);
 });
