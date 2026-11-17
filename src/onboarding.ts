@@ -1,9 +1,8 @@
-import { renderSVG } from "uqr";
 import { APPLICATION_COMMAND } from "./access";
 import { NOTICE_ICON_PATH, publicSiteUrl, required } from "./config";
 import { DISCORD_AUTH_PATH, discordSignupConfig } from "./discord-connection";
 import { renderSiteHeader, SITE_SHELL_STYLESHEET } from "./site-header";
-import { renderTelegramQr } from "./telegram-qr";
+import { renderSignupQr } from "./signup-qr";
 import type { Env } from "./types";
 
 function escapeHtml(value: string): string {
@@ -26,7 +25,7 @@ export function telegramApplicationLink(env: Env): string {
 export function renderOnboardingPage(env: Env): string {
   const botLink = telegramApplicationLink(env);
   const botUsername = new URL(botLink).pathname.slice(1);
-  const qr = renderTelegramQr(botLink);
+  const qr = renderSignupQr(botLink, "telegram");
   const safeBotLink = escapeHtml(botLink);
   const safeBotUsername = escapeHtml(botUsername);
   const canonical = publicSiteUrl(env);
@@ -49,13 +48,24 @@ export function renderOnboardingPage(env: Env): string {
     a { color:inherit; }
     main { word-break:keep-all; }
     .intro { text-align:center; }
-    .signup-nav { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; margin:20px 0 0; }
-    .signup-nav a { padding:6px 12px; border:1px solid var(--border); border-radius:6px; font-size:13px; font-weight:600; text-decoration:none; }
-    .signup-nav a:hover { background:var(--panel); }
-    .discord-layout { margin-top:40px; padding-top:32px; border-top:1px solid var(--border); }
+    .signup-switch { position:relative; }
+    .signup-choice { position:absolute; width:1px; height:1px; margin:0; opacity:0; clip-path:inset(50%); }
+    .signup-nav { display:grid; grid-template-columns:1fr 1fr; gap:4px; max-width:320px; margin:24px auto 0; padding:4px; border:1px solid var(--border); border-radius:10px; background:#010409; }
+    .signup-nav label { display:grid; min-height:44px; padding:6px 14px; place-items:center; border:1px solid transparent; border-radius:7px; color:#a5afbf; font-size:14px; font-weight:600; cursor:pointer; }
+    .signup-nav label:hover { background:#161b22; color:var(--text); }
+    #choose-telegram:checked ~ .signup-nav label[for="choose-telegram"],
+    #choose-discord:checked ~ .signup-nav label[for="choose-discord"] { background:#212832; border-color:#3e4c60; color:var(--text); }
+    #choose-telegram:focus-visible ~ .signup-nav label[for="choose-telegram"],
+    #choose-discord:focus-visible ~ .signup-nav label[for="choose-discord"] { outline:2px solid #58a6ff; outline-offset:2px; }
+    #choose-telegram:checked ~ .signup-panels #discord,
+    #choose-discord:checked ~ .signup-panels #telegram { display:none; }
     .button.discord { background:#454fbf; }
     .button.discord:hover { background:#515ed5; }
-    .discord-status { margin:40px auto 0; max-width:720px; padding-top:20px; border-top:1px solid var(--border); text-align:center; }
+    .discord-status { margin:36px auto 0; max-width:720px; padding-top:20px; text-align:center; }
+    .discord-card { border-color:#424676; }
+    .step__detail + .step__detail { margin-top:7px; }
+    .privacy-note { margin:18px 0 0; padding:11px 13px; border:1px solid #343759; border-radius:8px; background:#181b32; color:#c6cceb; font-size:12px; line-height:1.6; }
+    .privacy-note strong { color:var(--text); }
     .discord-status p { color:var(--muted); font-size:14px; }
     .layout { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); align-items:center; gap:48px; margin-top:36px; }
     .signup-steps, .card { width:min(100%,360px); justify-self:center; }
@@ -69,6 +79,7 @@ export function renderOnboardingPage(env: Env): string {
     .step__title { display:block; margin:0 0 2px; font-size:14px; line-height:28px; }
     .step__detail { margin:0; color:var(--muted); font-size:13px; line-height:1.65; }
     .step__detail strong { color:var(--text); }
+    .step__detail a { color:#8cc5ff; font-weight:600; text-underline-offset:2px; }
     .step__command { display:inline-block; max-width:100%; margin:9px 0 7px; padding:7px 11px; border:1px solid var(--border); border-radius:6px; background:var(--panel); color:#e6edf3; font-family:inherit; font-size:14px; font-weight:600; line-height:1.5; overflow-wrap:anywhere; }
     .card { padding:24px; border:1px solid var(--border); border-radius:8px; background:var(--panel); box-shadow:0 16px 48px rgba(1,4,9,.35); text-align:center; }
     .qr { width:100%; aspect-ratio:1; overflow:hidden; border-radius:12px; background:#fff; }
@@ -93,50 +104,56 @@ export function renderOnboardingPage(env: Env): string {
       <p class="eyebrow">비공식 KISA 보호나라 보안공지</p>
       <h1>보호나라 보안공지를 놓치지 마세요.</h1>
       <p class="lead">KISA 보호나라에 새 보안공지가 등록되면 알림을 보내드립니다.<br>Telegram 또는 Discord에서 구독을 신청하고 관리자 승인을 받으세요.</p>
-      <nav class="signup-nav" aria-label="알림 구독 방법">
-        <a href="#telegram">Telegram</a>
-        <a href="#discord">Discord</a>
-      </nav>
     </header>
-    <div class="layout" id="telegram">
-      <section class="signup-steps" aria-labelledby="signup-steps-title">
-        <h2 class="steps-title" id="signup-steps-title">Telegram 가입 방법</h2>
-        <ol class="steps" role="list">
-          <li class="step">
-            <span class="step__number" aria-hidden="true">1</span>
-            <div>
-              <strong class="step__title">Telegram 봇 열기</strong>
-              <p class="step__detail">QR을 스캔하거나 <strong>Telegram 봇 열기</strong>를 누릅니다.</p>
-            </div>
-          </li>
-          <li class="step">
-            <span class="step__number" aria-hidden="true">2</span>
-            <div>
-              <strong class="step__title">알람 구독 신청하기</strong>
-              <p class="step__detail">Telegram에서 <strong>시작</strong>을 누른 뒤, 봇의 개인 채팅에 아래 형식으로 보냅니다.</p>
-              <code class="step__command">/${APPLICATION_COMMAND} 성명</code>
-              <p class="step__detail">예) <strong>/${APPLICATION_COMMAND} 이예원</strong></p>
-              <p class="step__detail">명령은 <strong>붙여 쓰고</strong>, 공백 한 칸 뒤에 <strong>본인의 성명</strong>을 입력하세요.</p>
-            </div>
-          </li>
-          <li class="step">
-            <span class="step__number" aria-hidden="true">3</span>
-            <div>
-              <strong class="step__title">관리자 승인 기다리기</strong>
-              <p class="step__detail"><strong>승인 완료 메시지</strong>가 도착하면 이후 등록되는 보안공지를 받아볼 수 있습니다.</p>
-            </div>
-          </li>
-        </ol>
-      </section>
-      <aside class="card" aria-label="Telegram 가입 신청">
-        <div class="qr">${qr}</div>
-        <h2>Telegram에서 신청</h2>
-        <p class="handle">@${safeBotUsername}</p>
-        <a class="button" href="${safeBotLink}">Telegram 봇 열기</a>
-        <p class="fineprint">성명과 Telegram 프로필 정보는 관리자 승인에 사용되며, 승인 또는 거절 시 신청 데이터베이스에서 삭제됩니다.</p>
-      </aside>
+    <div class="signup-switch" role="group" aria-label="알림 플랫폼 선택">
+      <input class="signup-choice" id="choose-telegram" type="radio" name="signup-platform" aria-controls="telegram" checked>
+      <input class="signup-choice" id="choose-discord" type="radio" name="signup-platform" aria-controls="discord">
+      <div class="signup-nav">
+        <label for="choose-telegram">Telegram</label>
+        <label for="choose-discord">Discord</label>
+      </div>
+      <div class="signup-panels">
+        <div class="layout" id="telegram">
+          <section class="signup-steps" aria-labelledby="signup-steps-title">
+            <h2 class="steps-title" id="signup-steps-title">Telegram 가입 방법</h2>
+            <ol class="steps" role="list">
+              <li class="step">
+                <span class="step__number" aria-hidden="true">1</span>
+                <div>
+                  <strong class="step__title">Telegram 봇 열기</strong>
+                  <p class="step__detail">QR을 스캔하거나 <a href="${safeBotLink}">Telegram 봇 열기</a>를 누르세요.</p>
+                </div>
+              </li>
+              <li class="step">
+                <span class="step__number" aria-hidden="true">2</span>
+                <div>
+                  <strong class="step__title">알람 구독 신청하기</strong>
+                  <p class="step__detail">Telegram에서 <strong>시작</strong>을 누른 뒤, 봇의 개인 채팅에 아래 형식으로 보냅니다.</p>
+                  <code class="step__command">/${APPLICATION_COMMAND} 성명</code>
+                  <p class="step__detail">예) <strong>/${APPLICATION_COMMAND} 이예원</strong></p>
+                  <p class="step__detail">명령은 <strong>붙여 쓰고</strong>, 공백 한 칸 뒤에 <strong>본인의 성명</strong>을 입력하세요.</p>
+                </div>
+              </li>
+              <li class="step">
+                <span class="step__number" aria-hidden="true">3</span>
+                <div>
+                  <strong class="step__title">관리자 승인 기다리기</strong>
+                  <p class="step__detail"><strong>승인 완료 메시지</strong>가 도착하면 이후 등록되는 보안공지를 받아볼 수 있습니다.</p>
+                </div>
+              </li>
+            </ol>
+          </section>
+          <aside class="card" aria-label="Telegram 가입 신청">
+            <div class="qr">${qr}</div>
+            <h2>Telegram에서 신청</h2>
+            <p class="handle">@${safeBotUsername}</p>
+            <a class="button" href="${safeBotLink}">Telegram 봇 열기</a>
+            <p class="fineprint">성명과 Telegram 프로필 정보는 관리자 승인에 사용되며, 승인 또는 거절 시 신청 데이터베이스에서 삭제됩니다.</p>
+          </aside>
+        </div>
+        ${discordCard}
+      </div>
     </div>
-    ${discordCard}
     <footer class="notice" aria-label="서비스 및 라이선스 안내">
       <p>본 서비스는 수익 목적 없이 운영하는 비상업적 프로젝트이며, KISA와 별개로 운영되는 독립적인 비공식 알리미 서비스입니다.<br>한국인터넷진흥원(KISA)이 제공하는 <a href="https://www.boho.or.kr/kr/rss.do?bbsId=B0000133">보호나라 보안공지 RSS</a>를 활용해 새 공지 알림을 전달합니다.</p>
       <p>© 2026 · MIT License</p>
@@ -153,19 +170,23 @@ function renderDiscordCard(signupUrl: string | undefined): string {
       <p>Discord 구독 신청은 연결 준비 중입니다.</p>
     </section>`;
   }
-  return `<section class="layout discord-layout" id="discord" aria-labelledby="discord-title">
+  return `<section class="layout" id="discord" aria-labelledby="discord-title">
       <div class="signup-steps">
         <h2 class="steps-title" id="discord-title">Discord 가입 방법</h2>
         <ol class="steps" role="list">
           <li class="step">
             <span class="step__number" aria-hidden="true">1</span>
             <div><strong class="step__title">Discord 연결 화면 열기</strong>
-              <p class="step__detail">QR을 스캔하거나 <strong>Discord에서 신청</strong>을 누릅니다.</p></div>
+              <p class="step__detail">QR을 스캔하거나 <a href="${escapeHtml(signupUrl)}">Discord에서 신청</a>을 누르세요.</p></div>
           </li>
           <li class="step">
             <span class="step__number" aria-hidden="true">2</span>
-            <div><strong class="step__title">알림 구독 신청하기</strong>
-              <p class="step__detail">Discord에서 <strong>본인이 관리하는 비공개 채널</strong>을 선택하고 연결을 허용하세요.</p></div>
+            <div>
+              <strong class="step__title">내 서버와 채널 선택</strong>
+              <p class="step__detail"><strong>서버에 추가</strong>에는 로그인한 <strong>내 Discord 계정이 관리할 수 있는 서버</strong>가 표시됩니다.</p>
+              <p class="step__detail">내 서버를 고른 뒤 <strong>웹후크 추가하기</strong>에서 알림을 받을 <strong>비공개 텍스트 채널</strong>을 선택하고 <strong>허용</strong>을 누르세요.</p>
+              <p class="step__detail">서버가 없다면 Discord의 <strong>서버 추가(＋) → 직접 만들기</strong>에서 내 서버를 만들고, 그 안에 비공개 텍스트 채널을 추가하세요.</p>
+            </div>
           </li>
           <li class="step">
             <span class="step__number" aria-hidden="true">3</span>
@@ -173,9 +194,10 @@ function renderDiscordCard(signupUrl: string | undefined): string {
               <p class="step__detail">승인되면 선택한 채널로 새 공지가 전송됩니다. 푸시가 필요하면 채널 알림을 <strong>모든 메시지</strong>로 설정하세요.</p></div>
           </li>
         </ol>
+        <p class="privacy-note"><strong>같은 QR을 공유해도 각자 따로 받습니다.</strong> 구독자는 각자 자기 서버와 채널을 선택합니다. 운영자와 다른 구독자의 계정이나 서버는 이 과정에서 서로 공개되지 않습니다.</p>
       </div>
-      <aside class="card" aria-label="Discord 가입 신청">
-        <div class="qr" role="img" aria-label="Discord 가입 QR 코드">${renderSVG(signupUrl, { border: 4, ecc: "M" })}</div>
+      <aside class="card discord-card" aria-label="Discord 가입 신청">
+        <div class="qr">${renderSignupQr(signupUrl, "discord")}</div>
         <h2>Discord에서 신청</h2>
         <a class="button discord" href="${escapeHtml(signupUrl)}">Discord에서 신청</a>
         <p class="fineprint">Discord 계정 이름은 승인에 사용되며 신청 처리 후 삭제됩니다.</p>

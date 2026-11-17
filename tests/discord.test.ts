@@ -18,7 +18,12 @@ const hook = { id: "123456789012345674", token: "test-separate-channel-webhook",
 afterEach(() => vi.unstubAllGlobals());
 
 it("renders a QR for the signup page only when OAuth settings are available", () => {
-  expect(renderOnboardingPage(env)).toContain(origin + "/discord/subscribe");
+  const page = renderOnboardingPage(env);
+  expect(page).toContain(origin + "/discord/subscribe");
+  expect(page).toContain('aria-label="Discord 가입 QR 코드"');
+  expect(page).toContain("data-discord-logo");
+  expect(page).toContain('for="choose-discord"');
+  expect(page).toContain("내 Discord 계정이 관리할 수 있는 서버");
   expect(renderOnboardingPage(env)).toContain('href="/notices/"');
   const disabled = { ...env, DISCORD_CLIENT_SECRET: undefined };
   expect(discordSignupConfig(disabled)).toBeNull();
