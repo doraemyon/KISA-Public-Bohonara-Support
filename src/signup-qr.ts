@@ -15,15 +15,22 @@ const platformStyles = {
     label: "Telegram 봇 가입 QR 코드",
     colors: ["#6e61c5", "#4173c5", "#2376af"],
     logoPath: TELEGRAM_PLANE,
+    iconViewBox: "160 270 600 510",
     logoWidth: 1000, logoHeight: 1000, logoRatio: 1,
   },
   discord: {
     label: "Discord 가입 QR 코드",
     colors: ["#4537a8", "#4449b5", "#303d8d"],
     logoPath: DISCORD_CLYDE,
+    iconViewBox: "0 0 65 48",
     logoWidth: 65, logoHeight: 48, logoRatio: 0.72,
   },
 };
+
+export function renderSignupPlatformIcon(platform: keyof typeof platformStyles): string {
+  const { logoPath, iconViewBox } = platformStyles[platform];
+  return `<svg class="platform-icon" viewBox="${iconViewBox}" aria-hidden="true" focusable="false"><path fill="currentColor" d="${logoPath}"/></svg>`;
+}
 
 type DarkModule = (x: number, y: number) => boolean;
 

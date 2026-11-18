@@ -2,7 +2,7 @@ import { APPLICATION_COMMAND } from "./access";
 import { NOTICE_ICON_PATH, publicSiteUrl, required } from "./config";
 import { DISCORD_AUTH_PATH, discordSignupConfig } from "./discord-connection";
 import { renderSiteHeader, SITE_SHELL_STYLESHEET } from "./site-header";
-import { renderSignupQr } from "./signup-qr";
+import { renderSignupPlatformIcon, renderSignupQr } from "./signup-qr";
 import type { Env } from "./types";
 
 function escapeHtml(value: string): string {
@@ -44,23 +44,28 @@ export function renderOnboardingPage(env: Env): string {
   <link rel="icon" type="image/png" href="${NOTICE_ICON_PATH}">
   ${SITE_SHELL_STYLESHEET}
   <style>
-    :root { --panel:#161b22; --border:#30363d; --text:#f0f6fc; --muted:#8b949e; --green:#238636; }
+    :root { --panel:#161b22; --border:#30363d; --text:#f0f6fc; --muted:#8b949e; }
     a { color:inherit; }
     main { word-break:keep-all; }
     .intro { text-align:center; }
     .signup-switch { position:relative; }
     .signup-choice { position:absolute; width:1px; height:1px; margin:0; opacity:0; clip-path:inset(50%); }
-    .signup-nav { display:grid; grid-template-columns:1fr 1fr; gap:4px; max-width:320px; margin:24px auto 0; padding:4px; border:1px solid var(--border); border-radius:10px; background:#010409; }
-    .signup-nav label { display:grid; min-height:44px; padding:6px 14px; place-items:center; border:1px solid transparent; border-radius:7px; color:#a5afbf; font-size:14px; font-weight:600; cursor:pointer; }
-    .signup-nav label:hover { background:#161b22; color:var(--text); }
+    [data-platform="telegram"] { --platform-fill:#087aa7; --platform-hover:#08729e; --platform-edge:#42a7ca; --platform-tint:#112735; --platform-mark:#46b4e4; }
+    [data-platform="discord"] { --platform-fill:#5865f2; --platform-hover:#505bdf; --platform-edge:#808af4; --platform-tint:#1c2141; --platform-mark:#5865f2; }
+    .platform-icon { width:20px; height:20px; flex:none; }
+    .signup-nav { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:4px; max-width:320px; margin:24px auto 0; padding:4px; border:1px solid var(--border); border-radius:999px; background:#010409; }
+    .signup-nav label { display:flex; min-height:44px; padding:6px 12px; align-items:center; justify-content:center; gap:8px; border:1px solid transparent; border-radius:999px; color:#c3cbd6; font-size:14px; font-weight:600; white-space:nowrap; cursor:pointer; }
+    .signup-nav label .platform-icon { color:var(--icon-color,var(--platform-mark)); }
+    .signup-nav label:hover { background:var(--platform-tint); color:var(--text); }
     #choose-telegram:checked ~ .signup-nav label[for="choose-telegram"],
-    #choose-discord:checked ~ .signup-nav label[for="choose-discord"] { background:#212832; border-color:#3e4c60; color:var(--text); }
+    #choose-discord:checked ~ .signup-nav label[for="choose-discord"] { --icon-color:currentColor; background:var(--platform-fill); border-color:var(--platform-edge); color:#fff; }
     #choose-telegram:focus-visible ~ .signup-nav label[for="choose-telegram"],
-    #choose-discord:focus-visible ~ .signup-nav label[for="choose-discord"] { outline:2px solid #58a6ff; outline-offset:2px; }
+    #choose-discord:focus-visible ~ .signup-nav label[for="choose-discord"],
+    .button:focus-visible { outline:2px solid var(--platform-edge); outline-offset:2px; }
     #choose-telegram:checked ~ .signup-panels #discord,
     #choose-discord:checked ~ .signup-panels #telegram { display:none; }
     @media (prefers-reduced-motion: no-preference) {
-      .signup-nav label { transition:background-color 150ms ease, border-color 150ms ease, color 150ms ease; }
+      .signup-nav label, .button { transition:background-color 150ms ease, border-color 150ms ease, color 150ms ease; }
       #choose-telegram:checked ~ .signup-panels #telegram,
       #choose-discord:checked ~ .signup-panels #discord { animation:signup-panel-enter 180ms ease-out; }
     }
@@ -68,8 +73,6 @@ export function renderOnboardingPage(env: Env): string {
       from { opacity:0; transform:translateY(5px); }
       to { opacity:1; transform:translateY(0); }
     }
-    .button.discord { background:#454fbf; }
-    .button.discord:hover { background:#515ed5; }
     .discord-status { margin:36px auto 0; max-width:720px; padding-top:20px; text-align:center; }
     .discord-card { border-color:#424676; }
     .step__detail + .step__detail { margin-top:7px; }
@@ -95,8 +98,8 @@ export function renderOnboardingPage(env: Env): string {
     .qr svg { display:block; width:100%; height:100%; }
     .card h2 { margin:20px 0 6px; font-size:18px; letter-spacing:-.02em; }
     .handle { margin:0 0 18px; color:var(--muted); font:13px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace; }
-    .button { display:flex; min-height:44px; padding:9px 16px; align-items:center; justify-content:center; border:1px solid rgba(240,246,252,.1); border-radius:6px; background:var(--green); color:#fff; font-size:14px; font-weight:600; text-decoration:none; }
-    .button:hover { background:#2ea043; }
+    .button { display:inline-flex; min-width:min(100%,200px); min-height:44px; max-width:100%; padding:9px 18px; align-items:center; justify-content:center; gap:8px; border:1px solid var(--platform-edge); border-radius:999px; background:var(--platform-fill); color:#fff; font-size:14px; font-weight:600; text-decoration:none; }
+    .button:hover { background:var(--platform-hover); }
     .fineprint { margin:16px 0 0; color:var(--muted); font-size:11px; line-height:1.55; }
     .notice { max-width:700px; margin:40px auto 0; padding-top:20px; border-top:1px solid var(--border); color:var(--muted); font-size:12px; line-height:1.65; text-align:center; }
     .notice p { margin:0; }
@@ -118,8 +121,8 @@ export function renderOnboardingPage(env: Env): string {
       <input class="signup-choice" id="choose-telegram" type="radio" name="signup-platform" aria-controls="telegram" checked>
       <input class="signup-choice" id="choose-discord" type="radio" name="signup-platform" aria-controls="discord">
       <div class="signup-nav">
-        <label for="choose-telegram">Telegram</label>
-        <label for="choose-discord">Discord</label>
+        <label for="choose-telegram" data-platform="telegram">${renderSignupPlatformIcon("telegram")}<span>Telegram</span></label>
+        <label for="choose-discord" data-platform="discord">${renderSignupPlatformIcon("discord")}<span>Discord</span></label>
       </div>
       <div class="signup-panels">
         <div class="layout" id="telegram">
@@ -156,7 +159,7 @@ export function renderOnboardingPage(env: Env): string {
             <div class="qr">${qr}</div>
             <h2>Telegram에서 신청</h2>
             <p class="handle">@${safeBotUsername}</p>
-            <a class="button" href="${safeBotLink}">Telegram 봇 열기</a>
+            <a class="button" data-platform="telegram" href="${safeBotLink}">${renderSignupPlatformIcon("telegram")}<span>Telegram 봇 열기</span></a>
             <p class="fineprint">성명과 Telegram 프로필 정보는 관리자 승인에 사용되며, 승인 또는 거절 시 신청 데이터베이스에서 삭제됩니다.</p>
           </aside>
         </div>
@@ -216,7 +219,7 @@ function renderDiscordCard(signupUrl: string | undefined): string {
       <aside class="card discord-card" aria-label="Discord 가입 신청">
         <div class="qr">${renderSignupQr(signupUrl, "discord")}</div>
         <h2>Discord에서 신청</h2>
-        <a class="button discord" href="${escapeHtml(signupUrl)}">Discord에서 신청</a>
+        <a class="button" data-platform="discord" href="${escapeHtml(signupUrl)}">${renderSignupPlatformIcon("discord")}<span>Discord에서 신청</span></a>
         <p class="fineprint">신청 성명은 관리자 승인에 사용되며 신청 처리 후 삭제됩니다.</p>
       </aside>
     </section>`;
