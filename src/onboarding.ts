@@ -76,7 +76,7 @@ export function renderOnboardingPage(env: Env): string {
     .privacy-note { margin:18px 0 0; padding:11px 13px; border:1px solid #343759; border-radius:8px; background:#181b32; color:#c6cceb; font-size:12px; line-height:1.6; }
     .privacy-note strong { color:var(--text); }
     .discord-status p { color:var(--muted); font-size:14px; }
-    .layout { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); align-items:center; gap:48px; margin-top:36px; }
+    .layout { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); align-items:start; gap:48px; margin-top:36px; }
     .signup-steps, .card { width:min(100%,360px); justify-self:center; }
     .eyebrow { margin:0 0 12px; color:#58a6ff; font-size:13px; font-weight:600; }
     h1 { margin:0; font-size:clamp(32px,5.2vw,52px); line-height:1.12; letter-spacing:-.045em; text-wrap:balance; }
