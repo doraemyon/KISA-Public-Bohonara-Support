@@ -554,7 +554,7 @@ export default {
       return submitDiscordName(request, env);
     }
     if (url.pathname === DISCORD_RESUME_PATH && (request.method === "GET" || request.method === "POST")) {
-      return resumeDiscordSignup(request, env);
+      return resumeDiscordSignup(request);
     }
     if (request.method === "GET" && url.pathname === DISCORD_CALLBACK_PATH) {
       return completeDiscordSignup(request, env);

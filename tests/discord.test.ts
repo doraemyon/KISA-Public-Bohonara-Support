@@ -178,7 +178,7 @@ it.each([null, "김하늘"])("completes current and pre-deployment OAuth session
   expect(await result.text()).toContain("알림 신청 접수");
 });
 
-it("resumes a mobile callback only after confirmation in the browser that started it", async () => {
+it("resumes a mobile callback once in the browser that started it", async () => {
   const state = "f".repeat(64);
   const hash = await sha256(state);
   const startCookie = "__Host-discord-signup=" + state;
@@ -197,7 +197,6 @@ it("resumes a mobile callback only after confirmation in the browser that starte
       },
       first: async () => {
         if (values[0] !== hash || stored === null) return null;
-        if (sql.startsWith("SELECT 1 AS found FROM discord_signup_states")) return { found: 1 };
         if (sql.startsWith("DELETE FROM discord_signup_states")) {
           const result = { applicant_name: null, sealed_callback_code: stored };
           stored = null;
@@ -224,29 +223,19 @@ it("resumes a mobile callback only after confirmation in the browser that starte
   await expect(openDiscordCallbackCode(stored!, env.DISCORD_WEBHOOK_KEY!, await sha256(otherCookie))).rejects.toThrow();
   expect(network).not.toHaveBeenCalled();
 
-  const instructions = await resumeDiscordSignup(new Request(resumeUrl), live);
+  const instructions = resumeDiscordSignup(new Request(resumeUrl));
   expect(await instructions.text()).toContain("처음 연 브라우저에서 이어가기");
-  expect((await resumeDiscordSignup(new Request(resumeUrl, {
-    method: "POST", headers: { Origin: origin },
-  }), live)).status).toBe(403);
-  expect((await resumeDiscordSignup(new Request(resumeUrl, {
-    method: "POST", headers: { Origin: origin, Cookie: otherCookie },
-  }), live)).status).toBe(400);
-  expect((await resumeDiscordSignup(new Request(resumeUrl, {
-    method: "POST", headers: { Origin: "https://other.example.test", Cookie: startCookie },
-  }), live)).status).toBe(403);
+  const unrelated = await startDiscordSignup(new Request(signupUrl, { headers: { Cookie: otherCookie } }), live);
+  expect(new URL(unrelated.headers.get("Location")!).origin).toBe("https://discord.com");
   expect(network).not.toHaveBeenCalled();
 
-  const ready = await startDiscordSignup(new Request(signupUrl, { headers: { Cookie: startCookie } }), live);
-  expect(ready.status).toBe(200);
-  expect(ready.headers.get("Referrer-Policy")).toBe("same-origin");
-  expect(await ready.text()).toContain("연결 이어가기");
-  const resume = () => new Request(resumeUrl, { method: "POST", headers: { Origin: origin, Cookie: startCookie } });
-  const completed = await resumeDiscordSignup(resume(), live);
+  const resume = () => new Request(signupUrl, { headers: { Cookie: startCookie } });
+  const completed = await startDiscordSignup(resume(), live);
   expect(completed.status).toBe(303);
   expect(completed.headers.get("Location")).toBe("/discord/subscribe/name");
   expect((network.mock.calls[0][1].body as URLSearchParams).get("code")).toBe(code);
-  expect((await resumeDiscordSignup(resume(), live)).status).toBe(400);
+  const replay = await startDiscordSignup(resume(), live);
+  expect(new URL(replay.headers.get("Location")!).origin).toBe("https://discord.com");
   expect(network).toHaveBeenCalledTimes(2);
 });
 

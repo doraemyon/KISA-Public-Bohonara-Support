@@ -207,7 +207,7 @@ function renderDiscordCard(signupUrl: string | undefined): string {
             <span class="step__number" aria-hidden="true">3</span>
             <div>
               <strong class="step__title">성명 입력하기</strong>
-              <p class="step__detail">사이트로 돌아오면 <strong>본인의 성명</strong>을 입력하고 <strong>알림 구독 신청하기</strong>를 누르세요.</p>
+              <p class="step__detail">사이트로 돌아오면 <strong>본인의 성명</strong>을 입력하고 <strong>신청하기</strong>를 누르세요.</p>
             </div>
           </li>
           <li class="step">

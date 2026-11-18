@@ -15,7 +15,6 @@ const STATE_TTL_SECONDS = 600;
 interface SignupPageOptions {
   clearCookie?: boolean;
   showForm?: boolean;
-  resumeConnection?: boolean;
   nameError?: string;
 }
 
@@ -23,13 +22,13 @@ function signupPage(
   title: string,
   detail: string,
   status: number,
-  { clearCookie = false, showForm = false, resumeConnection = false, nameError = "" }: SignupPageOptions = {},
+  { clearCookie = false, showForm = false, nameError = "" }: SignupPageOptions = {},
 ): Response {
   const headers = new Headers({
     "Content-Type": "text/html; charset=utf-8",
     "Cache-Control": "no-store",
     // Browsers send Origin: null on form POSTs from documents using no-referrer.
-    "Referrer-Policy": showForm || resumeConnection ? "same-origin" : "no-referrer",
+    "Referrer-Policy": showForm ? "same-origin" : "no-referrer",
     "Strict-Transport-Security": "max-age=31536000",
     "X-Robots-Tag": "noindex",
     "Content-Security-Policy": "default-src 'none'; style-src 'self'; img-src 'self'; " +
@@ -46,11 +45,7 @@ function signupPage(
           <p class="signup-error" id="name-error" role="alert">${nameError}</p>
           <p class="signup-help" id="name-help">성명은 승인 심사를 위해 관리자에게 Telegram으로 전달됩니다.</p>
         </div>
-        <button type="submit">알림 구독 신청하기</button>
-      </form>` : "";
-
-  const resume = resumeConnection ? `<form class="signup-form" method="post" action="${DISCORD_RESUME_PATH}">
-        <button type="submit">연결 이어가기</button>
+        <button type="submit">신청하기</button>
       </form>` : "";
 
   return new Response(`<!doctype html>
@@ -73,7 +68,6 @@ function signupPage(
       <h1 id="signup-title">${title}</h1>
       <p class="signup-detail">${detail}</p>
       ${form}
-      ${resume}
     </section>
   </main>
 </body>
@@ -83,7 +77,7 @@ function signupPage(
 function signupFormPage(status: number, nameError = ""): Response {
   return signupPage(
     "Discord 알림 신청",
-    "Discord 채널이 연결됐습니다. 성명을 입력하면 관리자에게 신청이 전달됩니다.",
+    "연결한 채널에서 알림을 받으려면 본인의 성명을 입력해 주세요.",
     status,
     { showForm: true, nameError },
   );
@@ -117,7 +111,7 @@ async function activeNameSession(env: Env, hash: string): Promise<boolean> {
   return record?.found === 1;
 }
 
-async function rateLimited(request: Request, env: Env, stage: "start" | "name" | "handoff" | "resume"): Promise<Response | null> {
+async function rateLimited(request: Request, env: Env, stage: "start" | "name" | "handoff"): Promise<Response | null> {
   const ip = request.headers.get("CF-Connecting-IP") || "unknown";
   const { success } = await env.DISCORD_SIGNUP_LIMITER.limit({ key: stage + ":" + ip });
   if (success) return null;
@@ -141,16 +135,8 @@ export async function startDiscordSignup(request: Request, env: Env): Promise<Re
   if (cookie) {
     const hash = await sha256(cookie);
     if (await activeNameSession(env, hash)) return signupRedirect(DISCORD_NAME_PATH);
-    const handoff = await env.DB.prepare(
-      "SELECT 1 AS found FROM discord_signup_states " +
-      "WHERE state_hash = ?1 AND expires_at > ?2 AND sealed_callback_code IS NOT NULL",
-    ).bind(hash, new Date().toISOString()).first<{ found: number }>();
-    if (handoff) {
-      return signupPage(
-        "Discord 연결 이어가기", "Discord에서 허용한 채널 연결을 이 브라우저에서 이어가세요.",
-        200, { resumeConnection: true },
-      );
-    }
+    const resumed = await resumeDiscordConnection(env, config, hash);
+    if (resumed) return resumed;
   }
 
   const state = toHex(crypto.getRandomValues(new Uint8Array(32)));
@@ -297,31 +283,22 @@ async function registerChannel(env: Env, config: SignupConfig, code: string, nam
   }
 }
 
-function handoffInstructions(): Response {
+export function resumeDiscordSignup(request: Request): Response {
+  // Keep the short-lived handoff form from preceding deployments usable.
+  if (request.method === "POST") return signupRedirect(DISCORD_AUTH_PATH);
   return signupPage(
     "처음 연 브라우저에서 이어가기",
-    "처음 가입을 열었던 브라우저로 돌아가세요. 가입 페이지에서 ‘Discord에서 신청’을 다시 누른 뒤 ‘연결 이어가기’를 선택하세요. 처음 창을 닫았다면 기본 브라우저에서 다시 시작해 주세요.",
+    "처음 가입을 열었던 브라우저에서 ‘Discord에서 신청’을 다시 누르면 성명 입력이 이어집니다. 처음 창을 닫았다면 기본 브라우저에서 다시 시작해 주세요.",
     200,
   );
 }
 
-export async function resumeDiscordSignup(request: Request, env: Env): Promise<Response> {
-  if (request.method === "GET") return handoffInstructions();
-  const config = discordSignupConfig(env);
-  const state = signupCookie(request);
-  if (!config || !state || request.headers.get("Origin") !== publicSiteUrl(env)?.origin) {
-    return signupPage("연결을 확인할 수 없음", "처음 가입을 시작한 브라우저에서 다시 열어 주세요.", 403);
-  }
-  const limited = await rateLimited(request, env, "resume");
-  if (limited) return limited;
-  const hash = await sha256(state);
+async function resumeDiscordConnection(env: Env, config: SignupConfig, hash: string): Promise<Response | null> {
   const record = await env.DB.prepare(
     "DELETE FROM discord_signup_states WHERE state_hash = ?1 AND expires_at > ?2 " +
     "AND sealed_callback_code IS NOT NULL RETURNING applicant_name, sealed_callback_code",
   ).bind(hash, new Date().toISOString()).first<{ applicant_name: string | null; sealed_callback_code: string }>();
-  if (!record) {
-    return signupPage("연결을 이어갈 수 없음", "연결이 만료되었을 수 있습니다. 가입 페이지에서 다시 시작해 주세요.", 400);
-  }
+  if (!record) return null;
   try {
     const code = await openDiscordCallbackCode(record.sealed_callback_code, config.key, hash);
     return await registerChannel(env, config, code, record.applicant_name);
