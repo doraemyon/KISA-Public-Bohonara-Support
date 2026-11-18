@@ -193,7 +193,7 @@ function renderDiscordCard(signupUrl: string | undefined): string {
             <div>
               <strong class="step__title">내 서버와 채널 선택</strong>
               <p class="step__detail"><strong>서버에 추가</strong>에는 로그인한 <strong>내 Discord 계정이 관리할 수 있는 서버</strong>가 표시됩니다.</p>
-              <p class="step__detail">예를 들어 본인 서버가 <strong>‘내 닉네임님의 서버’</strong>로 표시되면 그 항목을 고르세요. 서버 이름을 바꿨다면 현재 이름으로 찾으세요.</p>
+              <p class="step__detail">예를 들어 본인 서버가 <strong>‘&lt;본인 닉네임&gt;님의 서버’</strong>로 표시되면 그 항목을 고르세요. 서버 이름을 바꿨다면 현재 이름으로 찾으세요.</p>
               <p class="step__detail">내 서버를 고른 뒤 <strong>웹후크 추가하기</strong>에서 알림을 받을 <strong>비공개 텍스트 채널</strong>을 선택하고 <strong>허용</strong>을 누르세요.</p>
               <p class="step__detail">서버가 없다면 Discord의 <strong>서버 추가(＋) → 직접 만들기</strong>에서 내 서버를 만들고, 그 안에 비공개 텍스트 채널을 추가하세요.</p>
             </div>
