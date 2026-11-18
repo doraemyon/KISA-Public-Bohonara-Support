@@ -18,8 +18,8 @@ import {
 } from "./applications";
 import { broadcastBatchSize, maxSubscribers, publicSiteUrl, required } from "./config";
 import { handleDiscordAdminCommand, handleDiscordCallback, processDiscordNotices } from "./discord";
-import { DISCORD_AUTH_PATH, DISCORD_CALLBACK_PATH } from "./discord-connection";
-import { completeDiscordSignup, startDiscordSignup } from "./discord-signup";
+import { DISCORD_AUTH_PATH, DISCORD_CALLBACK_PATH, DISCORD_NAME_PATH } from "./discord-connection";
+import { completeDiscordSignup, startDiscordSignup, submitDiscordName } from "./discord-signup";
 import { dispatchNoticePublication } from "./notice-dispatch";
 import { noticeKeyboard, serveNoticePage } from "./notice-pages";
 import { handleNoticePublication } from "./notice-storage";
@@ -549,6 +549,9 @@ export default {
     }
     if (url.pathname === DISCORD_AUTH_PATH && (request.method === "GET" || request.method === "POST")) {
       return startDiscordSignup(request, env);
+    }
+    if (url.pathname === DISCORD_NAME_PATH && (request.method === "GET" || request.method === "POST")) {
+      return submitDiscordName(request, env);
     }
     if (request.method === "GET" && url.pathname === DISCORD_CALLBACK_PATH) {
       return completeDiscordSignup(request, env);

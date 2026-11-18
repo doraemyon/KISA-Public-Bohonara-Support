@@ -2,7 +2,7 @@ import { sha256 } from "./access";
 import { parseApplicantName } from "./applications";
 import { maxApplicationsPerHour, maxPendingApplications, NOTICE_ICON_PATH, publicSiteUrl } from "./config";
 import {
-  DISCORD_AUTH_PATH, DISCORD_ORIGIN, discordApi, discordId, discordSignupConfig, isDiscordWebhook, openWebhook,
+  DISCORD_AUTH_PATH, DISCORD_NAME_PATH, DISCORD_ORIGIN, discordApi, discordId, discordSignupConfig, isDiscordWebhook, openWebhook,
   removeWebhook, sealWebhook, toHex,
 } from "./discord-connection";
 import { renderSignupPlatformIcon } from "./signup-qr";
@@ -37,7 +37,7 @@ function signupPage(
   });
   if (clearCookie) headers.set("Set-Cookie", COOKIE_NAME + "=; Secure; HttpOnly; SameSite=Lax; Path=/; Max-Age=0");
 
-  const form = showForm ? `<form class="signup-form" method="post" action="${DISCORD_AUTH_PATH}">
+  const form = showForm ? `<form class="signup-form" method="post" action="${DISCORD_NAME_PATH}">
         <div class="signup-field">
           <label for="name">성명</label>
           <input id="name" name="name" maxlength="48" required autocomplete="name"
@@ -45,7 +45,7 @@ function signupPage(
           <p class="signup-error" id="name-error" role="alert">${nameError}</p>
           <p class="signup-help" id="name-help">성명은 승인 심사를 위해 관리자에게 Telegram으로 전달됩니다.</p>
         </div>
-        <button type="submit">Discord에서 채널 선택</button>
+        <button type="submit">알림 구독 신청하기</button>
       </form>` : "";
 
   return new Response(`<!doctype html>
@@ -77,7 +77,7 @@ function signupPage(
 function signupFormPage(status: number, nameError = ""): Response {
   return signupPage(
     "Discord 알림 신청",
-    "성명을 입력한 뒤 Discord에서 알림을 받을 채널을 선택하세요.",
+    "Discord 채널이 연결됐습니다. 성명을 입력하면 관리자에게 신청이 전달됩니다.",
     status,
     { showForm: true, nameError },
   );
@@ -85,23 +85,101 @@ function signupFormPage(status: number, nameError = ""): Response {
 
 type SignupConfig = NonNullable<ReturnType<typeof discordSignupConfig>>;
 
+function signupCookie(request: Request): string | undefined {
+  const cookie = request.headers.get("Cookie")?.split(";").map((part) => part.trim())
+    .find((part) => part.startsWith(COOKIE_NAME + "="))?.slice(COOKIE_NAME.length + 1);
+  return cookie && /^[a-f0-9]{64}$/.test(cookie) ? cookie : undefined;
+}
+
+function signupRedirect(location: string, state?: string): Response {
+  const headers = new Headers({
+    Location: location, "Cache-Control": "no-store", "Referrer-Policy": "no-referrer",
+    "Strict-Transport-Security": "max-age=31536000",
+  });
+  if (state) {
+    headers.set("Set-Cookie", COOKIE_NAME + "=" + state + "; Secure; HttpOnly; SameSite=Lax; Path=/; Max-Age=" + STATE_TTL_SECONDS);
+  }
+  return new Response(null, { status: 303, headers });
+}
+
+async function activeNameSession(env: Env, hash: string): Promise<boolean> {
+  const record = await env.DB.prepare(
+    "SELECT 1 AS found FROM discord_webhook_subscriptions " +
+    "WHERE name_state_hash = ?1 AND name_expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now') " +
+    "AND applicant_name IS NULL AND approved_at IS NULL",
+  ).bind(hash).first<{ found: number }>();
+  return record?.found === 1;
+}
+
+async function rateLimited(request: Request, env: Env, stage: "start" | "name"): Promise<Response | null> {
+  const ip = request.headers.get("CF-Connecting-IP") || "unknown";
+  const { success } = await env.DISCORD_SIGNUP_LIMITER.limit({ key: stage + ":" + ip });
+  if (success) return null;
+  const response = signupPage(
+    "신청을 잠시 쉬어 주세요", "짧은 시간에 신청을 여러 번 시도했습니다. 1분 뒤 다시 시도해 주세요.",
+    429, { showForm: stage === "name" },
+  );
+  response.headers.set("Retry-After", "60");
+  return response;
+}
+
 export async function startDiscordSignup(request: Request, env: Env): Promise<Response> {
   const config = discordSignupConfig(env);
   if (!config) return signupPage("Discord 연결 준비 중", "연결이 완료되면 이 페이지에서 알림을 신청할 수 있습니다.", 503);
-  if (request.method === "GET") {
-    return signupFormPage(200);
+  // A name form opened before this version can restart at the Discord connection step.
+  if (request.method === "POST") return signupRedirect(DISCORD_AUTH_PATH);
+  const limited = await rateLimited(request, env, "start");
+  if (limited) return limited;
+
+  const cookie = signupCookie(request);
+  if (cookie && await activeNameSession(env, await sha256(cookie))) {
+    return signupRedirect(DISCORD_NAME_PATH);
   }
-  if (request.headers.get("Origin") !== publicSiteUrl(env)?.origin ||
-      !request.headers.get("Content-Type")?.startsWith("application/x-www-form-urlencoded")) {
-    return signupPage("신청을 시작할 수 없음", "가입 페이지에서 다시 신청해 주세요.", 403);
+
+  const state = toHex(crypto.getRandomValues(new Uint8Array(32)));
+  const now = Date.now();
+  const stored = await env.DB.prepare(
+    "INSERT INTO discord_signup_states (state_hash, expires_at) SELECT ?1, ?2 " +
+    "WHERE (SELECT COUNT(*) FROM discord_signup_states WHERE expires_at > ?3) < 100",
+  ).bind(await sha256(state), new Date(now + STATE_TTL_SECONDS * 1000).toISOString(), new Date(now).toISOString()).run();
+  if (stored.meta.changes !== 1) return signupPage("신청 대기 중", "잠시 후 다시 시도해 주세요.", 429);
+
+  const authorize = new URL("/oauth2/authorize", DISCORD_ORIGIN);
+  authorize.search = new URLSearchParams({
+    client_id: config.clientId, redirect_uri: config.redirect, response_type: "code",
+    scope: "identify webhook.incoming", prompt: "consent", state,
+  }).toString();
+  return signupRedirect(authorize.href, state);
+}
+
+function signupAccepted(): Response {
+  return signupPage(
+    "알림 신청 접수", "관리자가 승인하면 선택한 Discord 채널에서 이후 등록되는 보안공지를 받습니다.",
+    200, { clearCookie: true },
+  );
+}
+
+export async function submitDiscordName(request: Request, env: Env): Promise<Response> {
+  if (!discordSignupConfig(env)) return signupPage("Discord 연결 준비 중", "가입 페이지에서 연결 상태를 확인해 주세요.", 503);
+  if (request.method === "POST" && (
+    request.headers.get("Origin") !== publicSiteUrl(env)?.origin ||
+    !request.headers.get("Content-Type")?.startsWith("application/x-www-form-urlencoded")
+  )) {
+    return signupPage("신청을 확인할 수 없음", "가입 페이지에서 다시 신청해 주세요.", 403);
   }
-  const clientKey = request.headers.get("CF-Connecting-IP") || "unknown";
-  const { success } = await env.DISCORD_SIGNUP_LIMITER.limit({ key: clientKey });
-  if (!success) {
-    const response = signupPage("신청을 잠시 쉬어 주세요", "짧은 시간에 신청을 여러 번 시도했습니다. 1분 뒤 다시 시도해 주세요.", 429, { showForm: true });
-    response.headers.set("Retry-After", "60");
-    return response;
+  const expired = () => signupPage(
+    "연결을 다시 시작해 주세요", "가입 페이지에서 Discord 채널을 다시 연결해 주세요.", 400, { clearCookie: true },
+  );
+  const cookie = signupCookie(request);
+  if (!cookie) return expired();
+  if (request.method === "POST") {
+    const limited = await rateLimited(request, env, "name");
+    if (limited) return limited;
   }
+  const hash = await sha256(cookie);
+  if (!await activeNameSession(env, hash)) return expired();
+  if (request.method === "GET") return signupFormPage(200);
+
   const reader = request.body?.getReader();
   const bytes = new Uint8Array(4096);
   let offset = 0;
@@ -123,28 +201,16 @@ export async function startDiscordSignup(request: Request, env: Env): Promise<Re
   if (!name) {
     return signupFormPage(400, submittedName ? "성명은 문자로 2~48자 입력해 주세요." : "성명을 입력해 주세요.");
   }
-  const state = toHex(crypto.getRandomValues(new Uint8Array(32)));
-  const now = Date.now();
   const stored = await env.DB.prepare(
-    "INSERT INTO discord_signup_states (state_hash, expires_at, applicant_name) SELECT ?1, ?2, ?3 " +
-    "WHERE (SELECT COUNT(*) FROM discord_signup_states WHERE expires_at > ?4) < 100",
-  ).bind(await sha256(state), new Date(now + STATE_TTL_SECONDS * 1000).toISOString(), name, new Date(now).toISOString()).run();
-  if (stored.meta.changes !== 1) return signupPage("신청 대기 중", "잠시 후 다시 시도해 주세요.", 429, { showForm: true });
-  const authorize = new URL("/oauth2/authorize", DISCORD_ORIGIN);
-  authorize.search = new URLSearchParams({
-    client_id: config.clientId, redirect_uri: config.redirect, response_type: "code",
-    scope: "identify webhook.incoming", prompt: "consent", state,
-  }).toString();
-  return new Response(null, {
-    status: 303,
-    headers: {
-      Location: authorize.href, "Cache-Control": "no-store", "Referrer-Policy": "no-referrer",
-      "Set-Cookie": COOKIE_NAME + "=" + state + "; Secure; HttpOnly; SameSite=Lax; Path=/; Max-Age=" + STATE_TTL_SECONDS,
-    },
-  });
+    "UPDATE discord_webhook_subscriptions " +
+    "SET applicant_name = ?2, name_state_hash = NULL, name_expires_at = NULL, notify_after = ?3 " +
+    "WHERE name_state_hash = ?1 AND name_expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now') " +
+    "AND applicant_name IS NULL AND approved_at IS NULL",
+  ).bind(hash, name, new Date().toISOString()).run();
+  return stored.meta.changes === 1 ? signupAccepted() : expired();
 }
 
-async function registerChannel(env: Env, config: SignupConfig, code: string, name: string): Promise<Response> {
+async function registerChannel(env: Env, config: SignupConfig, code: string, name: string | null): Promise<Response> {
   const token = await discordApi("/oauth2/token", {
     method: "POST",
     body: new URLSearchParams({
@@ -167,18 +233,22 @@ async function registerChannel(env: Env, config: SignupConfig, code: string, nam
     const requestedAt = now.toISOString();
     const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000).toISOString();
     const hourlyLimit = maxApplicationsPerHour(env);
+    const nameState = name ? null : toHex(crypto.getRandomValues(new Uint8Array(32)));
+    const nameStateHash = nameState ? await sha256(nameState) : null;
+    const nameExpiresAt = nameState ? new Date(now.getTime() + STATE_TTL_SECONDS * 1000).toISOString() : null;
     const sealed = await sealWebhook(hook, config.key);
     const legacy = await env.DB.prepare(
       "SELECT id, sealed_webhook FROM discord_webhook_subscriptions " +
-      "WHERE discord_user_id = ?1 AND approved_at IS NULL AND applicant_name IS NULL",
+      "WHERE discord_user_id = ?1 AND approved_at IS NULL AND applicant_name IS NULL AND name_state_hash IS NULL",
     ).bind(identity.id).first<{ id: number; sealed_webhook: string }>();
     if (legacy) {
       const result = await env.DB.prepare(
         "UPDATE OR IGNORE discord_webhook_subscriptions " +
-        "SET channel_id = ?2, sealed_webhook = ?3, applicant_name = ?4, name = NULL, requested_at = ?5, notify_after = ?5, notified_at = NULL " +
-        "WHERE id = ?1 AND approved_at IS NULL AND applicant_name IS NULL " +
-        "AND (SELECT COUNT(*) FROM discord_webhook_subscriptions WHERE requested_at >= ?6) < ?7",
-      ).bind(legacy.id, hook.channel_id, sealed, name, requestedAt, oneHourAgo, hourlyLimit).run();
+        "SET channel_id = ?2, sealed_webhook = ?3, applicant_name = ?4, name = NULL, requested_at = ?5, " +
+        "notify_after = ?5, notified_at = NULL, name_state_hash = ?6, name_expires_at = ?7 " +
+        "WHERE id = ?1 AND approved_at IS NULL AND applicant_name IS NULL AND name_state_hash IS NULL " +
+        "AND (SELECT COUNT(*) FROM discord_webhook_subscriptions WHERE requested_at >= ?8 AND id <> ?1) < ?9",
+      ).bind(legacy.id, hook.channel_id, sealed, name, requestedAt, nameStateHash, nameExpiresAt, oneHourAgo, hourlyLimit).run();
       saved = result.meta.changes === 1;
       if (saved) {
         try {
@@ -189,17 +259,22 @@ async function registerChannel(env: Env, config: SignupConfig, code: string, nam
       }
     } else {
       const result = await env.DB.prepare(
-        "INSERT INTO discord_webhook_subscriptions (discord_user_id, channel_id, sealed_webhook, applicant_name, requested_at, notify_after) " +
-        "SELECT ?1, ?2, ?3, ?4, ?5, ?5 " +
-        "WHERE (SELECT COUNT(*) FROM discord_webhook_subscriptions WHERE approved_at IS NULL) < ?6 " +
-        "AND (SELECT COUNT(*) FROM discord_webhook_subscriptions WHERE requested_at >= ?7) < ?8 " +
+        "INSERT INTO discord_webhook_subscriptions " +
+        "(discord_user_id, channel_id, sealed_webhook, applicant_name, requested_at, notify_after, name_state_hash, name_expires_at) " +
+        "SELECT ?1, ?2, ?3, ?4, ?5, ?5, ?6, ?7 " +
+        "WHERE (SELECT COUNT(*) FROM discord_webhook_subscriptions WHERE approved_at IS NULL) < ?8 " +
+        "AND (SELECT COUNT(*) FROM discord_webhook_subscriptions WHERE requested_at >= ?9) < ?10 " +
         "ON CONFLICT DO NOTHING",
-      ).bind(identity.id, hook.channel_id, sealed, name, requestedAt, maxPendingApplications(env), oneHourAgo, hourlyLimit).run();
+      ).bind(
+        identity.id, hook.channel_id, sealed, name, requestedAt, nameStateHash, nameExpiresAt,
+        maxPendingApplications(env), oneHourAgo, hourlyLimit,
+      ).run();
       saved = result.meta.changes === 1;
     }
-    return saved
-      ? signupPage("알림 신청 접수", "관리자가 승인하면 선택한 Discord 채널에서 이후 등록되는 보안공지를 받습니다.", 200, { clearCookie: true })
-      : signupPage("알림 신청을 추가할 수 없음", "이미 신청한 계정이나 채널인지 확인해 주세요. 신규 신청 한도에 도달한 경우 나중에 다시 시도할 수 있습니다.", 409, { clearCookie: true });
+    if (!saved) {
+      return signupPage("알림 신청을 추가할 수 없음", "이미 신청한 계정이나 채널인지 확인해 주세요. 신규 신청 한도에 도달한 경우 나중에 다시 시도할 수 있습니다.", 409, { clearCookie: true });
+    }
+    return nameState ? signupRedirect(DISCORD_NAME_PATH, nameState) : signupAccepted();
   } finally {
     if (!saved) await removeWebhook(hook);
   }
@@ -210,8 +285,7 @@ export async function completeDiscordSignup(request: Request, env: Env): Promise
   if (!config) return signupPage("Discord 연결 준비 중", "가입 페이지에서 연결 상태를 확인해 주세요.", 503);
   const params = new URL(request.url).searchParams;
   const state = params.get("state") ?? "";
-  const cookie = request.headers.get("Cookie")?.split(";").map((part) => part.trim())
-    .find((part) => part.startsWith(COOKIE_NAME + "="))?.slice(COOKIE_NAME.length + 1);
+  const cookie = signupCookie(request);
   const issuer = params.get("iss");
   if (!/^[a-f0-9]{64}$/.test(state) || cookie !== state || (issuer && issuer !== DISCORD_ORIGIN)) {
     return signupPage("신청을 확인할 수 없음", "가입 페이지에서 다시 신청해 주세요.", 403);
@@ -219,7 +293,7 @@ export async function completeDiscordSignup(request: Request, env: Env): Promise
   const record = await env.DB.prepare(
     "DELETE FROM discord_signup_states WHERE state_hash = ?1 AND expires_at > ?2 RETURNING applicant_name",
   ).bind(await sha256(state), new Date().toISOString()).first<{ applicant_name: string | null }>();
-  if (!record?.applicant_name) return signupPage("신청 시간이 만료됨", "가입 페이지에서 다시 신청해 주세요.", 400, { clearCookie: true });
+  if (!record) return signupPage("신청 시간이 만료됨", "가입 페이지에서 다시 신청해 주세요.", 400, { clearCookie: true });
   const code = params.get("code");
   if (!code || code.length > 512 || params.has("error")) {
     return signupPage("채널 연결 취소", "Discord에 알림을 받으려면 채널 선택을 완료해 주세요.", 400, { clearCookie: true });

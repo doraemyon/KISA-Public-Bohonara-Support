@@ -44,12 +44,28 @@ export async function handleDiscordAdminCommand(env: Env, chatId: string, name: 
   return true;
 }
 
-async function removeStoredWebhook(env: Env, sealed: string): Promise<void> {
-  if (!env.DISCORD_WEBHOOK_KEY) return;
+async function removeStoredWebhook(env: Env, sealed: string): Promise<boolean> {
+  if (!env.DISCORD_WEBHOOK_KEY) return false;
   try {
-    await removeWebhook(await openWebhook(sealed, env.DISCORD_WEBHOOK_KEY));
+    return await removeWebhook(await openWebhook(sealed, env.DISCORD_WEBHOOK_KEY));
   } catch {
     console.error("Could not decrypt a removed Discord connection.");
+    return false;
+  }
+}
+
+async function cleanupUnfinishedSignups(env: Env, now: string): Promise<void> {
+  const expired = await env.DB.prepare(
+    "SELECT id, name_state_hash, sealed_webhook FROM discord_webhook_subscriptions " +
+    "WHERE approved_at IS NULL AND applicant_name IS NULL AND name_expires_at <= ?1 " +
+    "ORDER BY name_expires_at LIMIT 3",
+  ).bind(now).all<{ id: number; name_state_hash: string; sealed_webhook: string }>();
+  for (const row of expired.results) {
+    if (!await removeStoredWebhook(env, row.sealed_webhook)) continue;
+    await env.DB.prepare(
+      "DELETE FROM discord_webhook_subscriptions " +
+      "WHERE id = ?1 AND name_state_hash = ?2 AND approved_at IS NULL AND applicant_name IS NULL",
+    ).bind(row.id, row.name_state_hash).run();
   }
 }
 
@@ -199,10 +215,11 @@ export async function processDiscordNotices(env: Env): Promise<void> {
   const expiration = new Date(Date.now() - 30 * 86400_000).toISOString();
   const expired = await env.DB.prepare(
     "DELETE FROM discord_webhook_subscriptions WHERE id IN (SELECT id FROM discord_webhook_subscriptions " +
-    "WHERE approved_at IS NULL AND requested_at < ?1 ORDER BY requested_at LIMIT 3) RETURNING sealed_webhook",
+    "WHERE approved_at IS NULL AND name_state_hash IS NULL AND requested_at < ?1 ORDER BY requested_at LIMIT 3) RETURNING sealed_webhook",
   ).bind(expiration).all<{ sealed_webhook: string }>();
   await Promise.all([
     notifyAdmin(env, now),
+    cleanupUnfinishedSignups(env, now),
     ...due.results.map((row) => deliver(env, row, config.key, now)),
     ...expired.results.map((row) => removeStoredWebhook(env, row.sealed_webhook)),
   ]);

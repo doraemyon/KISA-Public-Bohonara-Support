@@ -89,7 +89,7 @@ Remove-Item Env:TELEGRAM_BOT_TOKEN
 
 ### Discord 알림 구독 연결
 
-가입 페이지의 Discord QR을 열고 성명을 입력합니다. Discord에서 자신이 관리하는 비공개 텍스트 채널을 선택하고 연결을 허용하면 구독 신청이 접수됩니다. 관리자가 텔레그램의 비공개 관리자 채팅에서 신청을 승인하면 이후 새 KISA 공지를 해당 채널에 보냅니다. 구독자와 관리자는 각자 Discord 채널에서 활동합니다.
+가입 페이지의 Discord QR을 스캔하거나 신청 링크를 엽니다. Discord에서 자신이 관리하는 텍스트 채널을 선택해 연결을 허용한 뒤, 사이트에서 성명을 제출하면 구독 신청이 접수됩니다. 관리자가 텔레그램의 비공개 관리자 채팅에서 신청을 승인하면 이후 새 KISA 공지를 해당 채널에 보냅니다. 구독자와 관리자는 각자 Discord 채널에서 활동합니다.
 
 #### 운영자 설정
 
@@ -113,14 +113,14 @@ Remove-Item Env:TELEGRAM_BOT_TOKEN
 #### 구독자가 사용하는 방법
 
 1. 본인이 웹훅을 관리할 수 있는 Discord 서버에 비공개 텍스트 채널을 마련합니다.
-2. [가입 페이지](https://notice.bohonara.workers.dev/)의 **Discord에서 신청**을 누르거나 QR을 스캔하고 성명을 입력합니다. Discord 화면에서 비공개 채널을 선택하고 연결을 허용합니다.
+2. [가입 페이지](https://notice.bohonara.workers.dev/)의 **Discord에서 신청**을 누르거나 QR을 스캔합니다. Discord 화면에서 채널을 선택하고 연결을 허용한 뒤, 사이트에서 성명을 입력합니다.
 3. 승인 후 새 공지가 선택한 채널에 게시되며 연결한 Discord 계정이 멘션됩니다. 휴대폰에서 알림을 받으려면 서버의 **모바일 푸시 알림**과 기기의 Discord 알림을 켜고, 서버와 채널의 음소거를 해제하세요. 구독을 취소하려면 Discord의 채널 웹훅을 삭제하세요.
 
 Discord는 채널 연결 권한을 확인합니다. 신청자가 선택한 채널의 공개 범위는 신청자 본인이 확인해야 합니다. 신청자가 입력한 성명은 관리자 승인에 사용하며, 신청을 처리하면 데이터베이스에서 삭제합니다. 공개 공지 목록과 국문·영문 문서는 누구나 열람할 수 있습니다.
 
 #### 반복 신청 제한
 
-Discord 웹 폼은 접속 IP별로, Telegram의 `/start`와 `/알림신청`은 계정별로 Cloudflare 위치당 분당 6회를 기준으로 제한합니다. Discord는 1분 후에 다시 시도하라는 안내를 표시하고, Telegram은 제한된 명령에 답장하지 않습니다. `MAX_APPLICATIONS_PER_HOUR`와 `MAX_PENDING_APPLICATIONS`는 플랫폼별로 각각 적용됩니다.
+Discord 연결 시작과 성명 제출은 각각 접속 IP별로, Telegram의 `/start`와 `/알림신청`은 계정별로 Cloudflare 위치당 분당 6회를 기준으로 제한합니다. Discord는 1분 후에 다시 시도하라는 안내를 표시하고, Telegram은 제한된 명령에 답장하지 않습니다. `MAX_APPLICATIONS_PER_HOUR`와 `MAX_PENDING_APPLICATIONS`는 플랫폼별로 각각 적용됩니다.
 
 ## 2. Cloudflare D1 만들기
 

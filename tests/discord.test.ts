@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
+import { sha256 } from "../src/access";
 import { discordSignupConfig, openWebhook, sealWebhook } from "../src/discord-connection";
-import { completeDiscordSignup, startDiscordSignup } from "../src/discord-signup";
+import { completeDiscordSignup, startDiscordSignup, submitDiscordName } from "../src/discord-signup";
 import { discordNoticeMessage, handleDiscordCallback, processDiscordNotices } from "../src/discord";
 import worker from "../src/index";
 import { renderOnboardingPage } from "../src/onboarding";
@@ -15,6 +16,9 @@ const env = {
   DISCORD_WEBHOOK_KEY: "ab".repeat(32),
   ADMIN_TELEGRAM_USER_ID: "100", TELEGRAM_BOT_TOKEN: "mock-telegram-token",
 } as Partial<Env> as Env;
+const signupUrl = origin + "/discord/subscribe";
+const nameUrl = signupUrl + "/name";
+const nameCookie = "__Host-discord-signup=" + "a".repeat(64);
 const hook = { id: "123456789012345674", token: "test-separate-channel-webhook", channel_id: "123456789012345675" };
 
 afterEach(() => vi.unstubAllGlobals());
@@ -32,52 +36,47 @@ it("renders a QR for the signup page only when OAuth settings are available", ()
   expect(renderOnboardingPage(disabled)).toContain("Discord 구독 신청은 연결 준비 중입니다.");
 });
 
-it("requires HTTPS on the public signup form", async () => {
-  const signupUrl = origin + "/discord/subscribe";
-  const insecureUrl = signupUrl.replace("https:", "http:");
+it("requires HTTPS for the connection and the name form", async () => {
   const ctx = {} as ExecutionContext;
-  const get = await worker.fetch(new Request(insecureUrl), env, ctx);
+  const get = await worker.fetch(new Request(signupUrl.replace("https:", "http:")), env, ctx);
   expect(get.status).toBe(308);
   expect(get.headers.get("Location")).toBe(signupUrl);
-  const post = await worker.fetch(new Request(insecureUrl, {
+  const post = await worker.fetch(new Request(nameUrl.replace("https:", "http:"), {
     method: "POST", headers: { Origin: origin }, body: new URLSearchParams({ name: "가상검증" }),
   }), env, ctx);
   expect(post.status).toBe(400);
   expect(post.headers.has("Location")).toBe(false);
-  const form = await worker.fetch(new Request(signupUrl), env, ctx);
+  const form = await worker.fetch(new Request(nameUrl), env, ctx);
+  expect(form.status).toBe(400);
   expect(form.headers.get("Strict-Transport-Security")).toBe("max-age=31536000");
 });
 
-it.each([null, "null", "https://other.example.test"])("rejects the form POST from origin %s", async (source) => {
+it.each([null, "null", "https://other.example.test"])("rejects the name POST from origin %s", async (source) => {
   const prepare = vi.fn();
   const live = { ...env, DB: { prepare } as unknown as D1Database };
-  const response = await startDiscordSignup(new Request(origin + "/discord/subscribe", {
-    method: "POST", headers: source ? { Origin: source } : {},
-    body: new URLSearchParams({ name: "가상검증" }),
+  const headers = new Headers({ Cookie: nameCookie });
+  if (source) headers.set("Origin", source);
+  const response = await submitDiscordName(new Request(nameUrl, {
+    method: "POST", headers, body: new URLSearchParams({ name: "가상검증" }),
   }), live);
   expect(response.status).toBe(403);
   expect(prepare).not.toHaveBeenCalled();
 });
 
-it("rate-limits Discord submissions by Cloudflare IP before reading names or writing OAuth state", async () => {
+it("rate-limits authorization and name submissions before allocating database state", async () => {
   const prepare = vi.fn();
-  const limit = vi.fn(async () => ({ success: false }));
-  const live = {
-    ...env, DISCORD_SIGNUP_LIMITER: { limit },
-    DB: { prepare } as unknown as D1Database,
-  };
-  const url = origin + "/discord/subscribe";
-  expect((await startDiscordSignup(new Request(url), live)).status).toBe(200);
-  expect(limit).not.toHaveBeenCalled();
-  const post = new Request(url, {
+  const limit = vi.fn(async (_options: RateLimitOptions) => ({ success: false }));
+  const live = { ...env, DISCORD_SIGNUP_LIMITER: { limit }, DB: { prepare } as unknown as D1Database };
+  const start = await startDiscordSignup(new Request(signupUrl, { headers: { "CF-Connecting-IP": "192.0.2.2" } }), live);
+  expect(start.status).toBe(429);
+  expect(start.headers.get("Retry-After")).toBe("60");
+  const post = new Request(nameUrl, {
     method: "POST",
-    headers: { Origin: origin, "CF-Connecting-IP": "192.0.2.2" },
+    headers: { Origin: origin, Cookie: nameCookie, "CF-Connecting-IP": "192.0.2.2" },
     body: new URLSearchParams({ name: "가상검증" }),
   });
-  const response = await startDiscordSignup(post, live);
-  expect(response.status).toBe(429);
-  expect(response.headers.get("Retry-After")).toBe("60");
-  expect(limit).toHaveBeenCalledWith({ key: "192.0.2.2" });
+  expect((await submitDiscordName(post, live)).status).toBe(429);
+  expect(limit.mock.calls).toEqual([[{ key: "start:192.0.2.2" }], [{ key: "name:192.0.2.2" }]]);
   expect(post.bodyUsed).toBe(false);
   expect(prepare).not.toHaveBeenCalled();
 });
@@ -85,10 +84,10 @@ it("rate-limits Discord submissions by Cloudflare IP before reading names or wri
 it.each([
   ["  ", "성명을 입력해 주세요."],
   ["<script>", "성명은 문자로 2~48자 입력해 주세요."],
-])("shows a name-field error for invalid input (%j)", async (name, message) => {
-  const prepare = vi.fn();
-  const response = await startDiscordSignup(new Request(origin + "/discord/subscribe", {
-    method: "POST", headers: { Origin: origin }, body: new URLSearchParams({ name }),
+])("shows a name-field error after authorization for invalid input (%j)", async (name, message) => {
+  const prepare = vi.fn(() => ({ bind: () => ({ first: async () => ({ found: 1 }) }) }));
+  const response = await submitDiscordName(new Request(nameUrl, {
+    method: "POST", headers: { Origin: origin, Cookie: nameCookie }, body: new URLSearchParams({ name }),
   }), { ...env, DB: { prepare } as unknown as D1Database });
   const page = await response.text();
   expect(response.status).toBe(400);
@@ -96,47 +95,107 @@ it.each([
   expect(page).toContain('aria-describedby="name-error name-help" aria-invalid="true"');
   expect(page).toContain('id="name-error" role="alert">' + message + '</p>');
   expect(page).not.toContain("<script>");
-  expect(prepare).not.toHaveBeenCalled();
+  expect(prepare).toHaveBeenCalledTimes(1);
 });
 
-it("redeems a same-browser state once and stores only an encrypted webhook for review", async () => {
-  const insert = vi.fn(async () => ({ meta: { changes: 1 } }));
-  const consume = vi.fn().mockResolvedValueOnce({ applicant_name: "김하늘" }).mockResolvedValue(null);
-  const bind = vi.fn(() => ({ first: consume, run: insert }));
-  const live = { ...env, DB: { prepare: () => ({ bind }) } as unknown as D1Database };
-  const start = await startDiscordSignup(new Request(origin + "/discord/subscribe"), live);
-  expect(start.headers.get("Referrer-Policy")).toBe("same-origin");
-  expect(await start.text()).toContain('name="name"');
-  expect(bind).not.toHaveBeenCalled();
-  const go = await startDiscordSignup(new Request(origin + "/discord/subscribe", {
-    method: "POST", headers: { Origin: origin },
-    body: new URLSearchParams({ name: "김하늘" }),
-  }), live);
+it.each([null, "김하늘"])("completes current and pre-deployment OAuth sessions (%j)", async (legacyName) => {
+  const write = vi.fn(async () => ({ meta: { changes: 1 } }));
+  const finish = vi.fn((..._params: unknown[]) => ({ run: write }));
+  const consume = vi.fn().mockResolvedValueOnce({ applicant_name: legacyName }).mockResolvedValue(null);
+  const selectName = vi.fn();
+  const prepare = vi.fn((query: string) => {
+    if (query.startsWith("DELETE FROM discord_signup_states")) return { bind: () => ({ first: consume }) };
+    if (query.startsWith("SELECT id, sealed_webhook")) {
+      return { bind: () => ({ first: async () => null }) };
+    }
+    if (query.startsWith("SELECT 1 AS found")) return { bind: selectName };
+    if (query.startsWith("UPDATE discord_webhook_subscriptions")) return { bind: finish };
+    return { bind: vi.fn(() => ({ run: write })) };
+  });
+  const live = { ...env, DB: { prepare } as unknown as D1Database };
+
+  const go = await startDiscordSignup(new Request(signupUrl), live);
   expect(go.status).toBe(303);
   expect(go.headers.get("Referrer-Policy")).toBe("no-referrer");
   const auth = new URL(go.headers.get("Location")!);
   expect(auth.origin).toBe("https://discord.com");
   expect(auth.searchParams.get("scope")).toBe("identify webhook.incoming");
   expect(auth.href).not.toContain(env.DISCORD_CLIENT_SECRET);
-  expect(decodeURIComponent(auth.href)).not.toContain("김하늘");
-  const state = auth.searchParams.get("state");
+  expect(await go.text()).toBe("");
+  const state = auth.searchParams.get("state")!;
   const cookie = go.headers.get("Set-Cookie")!.split(";")[0];
   const callbackUrl = origin + "/discord/callback?code=callback-code&state=" + state;
 
   const network = vi.fn(async (url: string) => url.endsWith("/oauth2/token")
     ? Response.json({ webhook: hook, access_token: "short-lived-access" })
-    : Response.json({ id: "123456789012345676", username: "other-name", global_name: "다른 표시 이름" }));
+    : Response.json({ id: "123456789012345676", username: "other-name" }));
   vi.stubGlobal("fetch", network);
   expect((await completeDiscordSignup(new Request(callbackUrl), live)).status).toBe(403);
   expect(network).not.toHaveBeenCalled();
-  expect((await completeDiscordSignup(new Request(callbackUrl, { headers: { Cookie: cookie } }), live)).status).toBe(200);
+  const callback = await completeDiscordSignup(new Request(callbackUrl, { headers: { Cookie: cookie } }), live);
   expect((await completeDiscordSignup(new Request(callbackUrl, { headers: { Cookie: cookie } }), live)).status).toBe(400);
   expect(network).toHaveBeenCalledTimes(2);
-  const [, channelId, sealed, name] = bind.mock.calls.at(-2) as unknown as string[];
+
+  const statement = prepare.mock.results[prepare.mock.calls.findIndex(([query]) =>
+    query.startsWith("INSERT INTO discord_webhook_subscriptions"))].value;
+  const [, channelId, sealed, savedName, , storedHash, expiresAt] = vi.mocked(statement.bind).mock.calls[0] as unknown as (string | null)[];
   expect(channelId).toBe(hook.channel_id);
-  expect(name).toBe("김하늘");
   expect(sealed).not.toContain(hook.token);
-  expect(await openWebhook(sealed, env.DISCORD_WEBHOOK_KEY!)).toEqual(hook);
+  expect(await openWebhook(sealed!, env.DISCORD_WEBHOOK_KEY!)).toEqual(hook);
+  expect(savedName).toBe(legacyName);
+
+  if (legacyName) {
+    expect(callback.status).toBe(200);
+    expect(storedHash).toBeNull();
+    expect(await callback.text()).toContain("알림 신청 접수");
+    return;
+  }
+
+  expect(callback.status).toBe(303);
+  expect(callback.headers.get("Location")).toBe("/discord/subscribe/name");
+  const continuation = callback.headers.get("Set-Cookie")!.split(";")[0];
+  expect(continuation).not.toBe(cookie);
+  expect(await sha256(continuation.split("=")[1])).toBe(storedHash);
+  expect(expiresAt).not.toBeNull();
+  selectName.mockImplementation((hash: string) => ({
+    first: async () => hash === storedHash ? { found: 1 } : null,
+  }));
+
+  expect((await submitDiscordName(new Request(nameUrl, { headers: { Cookie: cookie } }), live)).status).toBe(400);
+  const form = await submitDiscordName(new Request(nameUrl, { headers: { Cookie: continuation } }), live);
+  expect(form.status).toBe(200);
+  expect(form.headers.get("Referrer-Policy")).toBe("same-origin");
+  expect(await form.text()).toContain('name="name"');
+  const result = await submitDiscordName(new Request(nameUrl, {
+    method: "POST", headers: { Origin: origin, Cookie: continuation },
+    body: new URLSearchParams({ name: "김하늘" }),
+  }), live);
+  expect(finish).toHaveBeenCalledWith(storedHash, "김하늘", expect.any(String));
+  expect(result.status).toBe(200);
+  expect(result.headers.get("Set-Cookie")).toContain("Max-Age=0");
+  expect(await result.text()).toContain("알림 신청 접수");
+});
+
+it("retries expired OAuth connections until Discord removes the unused webhook", async () => {
+  const cleanup = vi.fn(async () => ({ meta: { changes: 1 } }));
+  const expired = {
+    id: 3, name_state_hash: "expired-state", sealed_webhook: await sealWebhook(hook, env.DISCORD_WEBHOOK_KEY!),
+  };
+  const prepare = (sql: string) => ({
+    bind: () => ({
+      all: async () => ({ results: sql.startsWith("SELECT id, name_state_hash,") ? [expired] : [] }),
+      run: cleanup,
+    }),
+  });
+  const live = { ...env, DB: { prepare, batch: async () => [] } as unknown as D1Database };
+  const remove = vi.fn().mockResolvedValueOnce(new Response(null, { status: 503 })).mockResolvedValueOnce(new Response(null, { status: 204 }));
+  vi.stubGlobal("fetch", remove);
+  await processDiscordNotices(live);
+  expect(cleanup).not.toHaveBeenCalled();
+  await processDiscordNotices(live);
+  expect(cleanup).toHaveBeenCalledTimes(1);
+  expect(remove).toHaveBeenCalledTimes(2);
+  expect(remove.mock.calls[0][1].method).toBe("DELETE");
 });
 
 it("restricts approval to the configured Telegram admin chat", async () => {

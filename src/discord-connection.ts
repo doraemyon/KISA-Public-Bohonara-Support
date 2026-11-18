@@ -2,6 +2,7 @@ import { publicSiteUrl } from "./config";
 import type { Env } from "./types";
 
 export const DISCORD_AUTH_PATH = "/discord/subscribe";
+export const DISCORD_NAME_PATH = "/discord/subscribe/name";
 export const DISCORD_CALLBACK_PATH = "/discord/callback";
 export const DISCORD_ORIGIN = "https://discord.com";
 
@@ -45,12 +46,13 @@ export function webhookPath(hook: DiscordWebhook): string {
   return "/webhooks/" + hook.id + "/" + hook.token;
 }
 
-export async function removeWebhook(hook: DiscordWebhook): Promise<void> {
+export async function removeWebhook(hook: DiscordWebhook): Promise<boolean> {
   try {
     const response = await discordApi(webhookPath(hook), { method: "DELETE" });
-    await response.body?.cancel();
+    await response.body?.cancel().catch(() => {});
+    return response.ok || [401, 403, 404].includes(response.status);
   } catch {
-    // The subscriber can also remove the webhook in Discord.
+    return false;
   }
 }
 

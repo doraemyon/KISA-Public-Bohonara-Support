@@ -196,15 +196,18 @@ function renderDiscordCard(signupUrl: string | undefined): string {
           </li>
           <li class="step">
             <span class="step__number" aria-hidden="true">2</span>
-            <div><strong class="step__title">성명 입력하기</strong>
-              <p class="step__detail">QR을 스캔하거나 <a href="${escapeHtml(signupUrl)}">Discord에서 신청</a>을 눌러 본인의 성명을 입력하세요.</p></div>
+            <div>
+              <strong class="step__title">Discord 채널 연결하기</strong>
+              <p class="step__detail">휴대폰에서 QR을 스캔하거나 <a href="${escapeHtml(signupUrl)}">Discord에서 신청</a>을 눌러 연결 화면을 여세요.</p>
+              <p class="step__detail"><strong>서버에 추가</strong>에서 내 Discord 계정이 관리할 수 있는 서버를 고르세요. 기본 이름은 <strong>‘&lt;본인 닉네임&gt;님의 서버’</strong>로 표시될 수 있습니다.</p>
+              <p class="step__detail"><strong>웹후크 추가하기</strong>에서 알림을 받을 채널을 선택하고 허용을 누르세요.</p>
+            </div>
           </li>
           <li class="step">
             <span class="step__number" aria-hidden="true">3</span>
             <div>
-              <strong class="step__title">서버와 채널 연결하기</strong>
-              <p class="step__detail"><strong>서버에 추가</strong>에서 내 Discord 계정이 관리할 수 있는 서버를 고르세요. 기본 이름은 <strong>‘&lt;본인 닉네임&gt;님의 서버’</strong>로 표시될 수 있습니다.</p>
-              <p class="step__detail"><strong>웹후크 추가하기</strong>에서 알림을 받을 채널을 선택하고 허용을 누르세요.</p>
+              <strong class="step__title">성명 입력하기</strong>
+              <p class="step__detail">사이트로 돌아오면 <strong>본인의 성명</strong>을 입력하고 <strong>알림 구독 신청하기</strong>를 누르세요.</p>
             </div>
           </li>
           <li class="step">
