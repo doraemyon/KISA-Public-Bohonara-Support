@@ -1,0 +1,301 @@
+# 설치·운영 안내
+
+[서비스 소개와 화면](../README.md)
+
+## 주요 기능
+
+- 반응형 가입 안내 페이지와 Telegram·Discord QR
+- 관리자 개인 Telegram의 가입 승인·거절 버튼
+- 시간당 신청·승인 대기·구독자 수 상한
+- 일회용·다회용 만료 초대 링크도 보조 수단으로 유지
+- `/start`, `/stop`, `/status`, `/help` 구독 명령
+- 관리자 전용 `/applications`, `/approve`, `/reject`, `/reopen`, `/invite`, `/subscribers`, `/revoke`
+- 구독자 수 상한 강제 적용(기본 50명)
+- 한 번에 최대 20명씩 분할 발송
+- 실패 지수 백오프 재시도
+- 봇 차단·탈퇴 사용자의 구독 자동 정리
+- KISA 기존 공지로 최초 상태를 만들고 과거 공지는 발송하지 않음
+- Worker 주소에서 국문·영문 공지 열람, 복사, 다운로드
+
+```text
+GitHub Public 저장소 ──배포──> Cloudflare Worker
+                                  ├─ 공개 가입 페이지 + Telegram·Discord QR
+                                  ├─ Telegram·Discord 구독 신청과 관리자 승인
+                                  ├─ KISA RSS 1분 확인
+                                  └─ Cloudflare D1 (비공개 신청·구독 정보)
+```
+
+## 가입 신청과 접근 통제
+
+Worker 첫 화면의 QR 또는 버튼으로 Telegram 봇을 열고 **시작**을 누릅니다. 봇의 개인 채팅에 `/알림신청 성명`을 입력합니다. 예를 들어 `/알림신청 이예원`처럼 보냅니다. 관리자가 성명과 Telegram 신청자를 확인해 승인하면 구독이 시작됩니다.
+
+```text
+[KISA 알림 봇 가입 신청]
+표시 이름: ...
+Telegram 사용자명: @...
+성명: ...
+Chat ID: ...
+
+[승인] [거절]
+```
+
+- 가입 페이지에는 관리자 API나 신청자 목록이 없습니다.
+- 승인 callback은 webhook secret과 `ADMIN_TELEGRAM_USER_ID`를 모두 확인합니다.
+- 표시 이름, Telegram 사용자명, 신청 성명은 승인 또는 거절 시 D1 신청 기록에서 삭제합니다.
+- 같은 chat ID는 한 번만 신청할 수 있습니다.
+- 시간당 신규 신청은 기본 20건, 전체 승인 대기는 기본 100건입니다.
+- 관리자 신청 알림은 분당 최대 5건으로 제한합니다.
+- 성명 입력 안내는 같은 대화에 분당 한 번, 봇 전체에서 분당 최대 5회로 제한합니다. 신청 결과는 관리자 처리 후 전달됩니다.
+- 기존 제한형 초대 링크도 관리자가 필요할 때 사용할 수 있습니다.
+- 초대 코드 원문은 DB에 저장하지 않고 SHA-256 해시만 저장합니다.
+- 사용 횟수는 1~20회, 유효기간은 1~30일로 제한합니다.
+- 구독자 최대 인원은 배포 변수로 제한합니다.
+- 관리자가 아닌 사용자는 초대 생성, 승인·거절, 신청자·구독자 조회와 강제 해제를 실행할 수 없습니다.
+
+## 공지 열람
+
+국문·영문 문서는 기존 공지 생성 작업에서 완성합니다. Worker는 내부 문서 주소에서 결과를 읽고 `/notices/` 아래의 공개 주소로 제공합니다. 양쪽 문서가 준비되기 전에는 같은 주소에서 게시 상태를 자동으로 확인합니다.
+
+## 비용과 한도
+
+팀 단위 사용은 Cloudflare Workers와 D1 무료 범위에서 운영할 수 있습니다. 예약 실행 한 번에 공지 알림 20건과 관리자 신청 알림 5건 이하로 제한해 Telegram 대량 발송 제한과 Workers 외부 요청 제한 아래에 둡니다.
+
+- [Cloudflare Workers Free 한도](https://developers.cloudflare.com/workers/platform/limits/)
+- [Cloudflare D1 가격과 무료 한도](https://developers.cloudflare.com/d1/platform/pricing/)
+- [Telegram Bot 발송 제한](https://core.telegram.org/bots/faq#broadcasting-to-users)
+
+## 1. 새 Telegram 봇 만들기 — 사용자 작업 필요
+
+1. Telegram에서 공식 `@BotFather`를 엽니다.
+2. `/newbot`으로 이 프로젝트 전용 봇을 만듭니다.
+3. 봇 사용자 이름과 HTTP API token을 복사합니다.
+4. BotFather의 `/setjoingroups`에서 이 봇의 그룹 추가를 **Disable**로 설정합니다.
+5. 새 봇에게 `/start`를 한 번 보냅니다.
+
+Telegram 정책상 봇 생성과 token 발급은 BotFather에서 계정 소유자가 직접 해야 합니다. 봇 token은 Issue, 채팅, 코드에 올리지 마세요.
+
+### Telegram 초기 설정 자동화
+
+Webhook을 연결하기 전에 개인 PC PowerShell에서 실행합니다.
+
+```powershell
+$env:TELEGRAM_BOT_TOKEN = "BotFather_token"
+npm ci
+npm run setup:telegram
+Remove-Item Env:TELEGRAM_BOT_TOKEN
+```
+
+스크립트가 bot token 검증, 봇 사용자 이름 조회, 명령어·설명 등록, 관리자 숫자 ID 확인과 webhook secret 생성을 처리합니다. 출력된 `BOT_USERNAME`, `ADMIN_TELEGRAM_USER_ID`, `TELEGRAM_WEBHOOK_SECRET`은 다음 설정에 사용합니다.
+
+### Discord 알림 구독 연결
+
+가입 페이지의 Discord QR을 열고 성명을 입력합니다. Discord에서 자신이 관리하는 비공개 텍스트 채널을 선택하고 연결을 허용하면 구독 신청이 접수됩니다. 관리자가 텔레그램의 비공개 관리자 채팅에서 신청을 승인하면 이후 새 KISA 공지를 해당 채널에 보냅니다. 구독자와 관리자는 각자 Discord 채널에서 활동합니다.
+
+#### 운영자 설정
+
+1. [Discord Developer Portal](https://discord.com/developers/applications)에서 앱을 만듭니다. **OAuth2 → Redirects**에 운영 Worker의 `/discord/callback` 주소를 정확히 추가합니다. 이 프로젝트의 운영 주소는 `https://notice.bohonara.workers.dev/discord/callback`입니다.
+2. Worker의 **Settings → Variables and Secrets**에 아래 세 값을 **Secret**으로 저장합니다.
+
+   | Secret | 값 |
+   | --- | --- |
+   | `DISCORD_CLIENT_ID` | Discord 앱의 Application ID |
+   | `DISCORD_CLIENT_SECRET` | Discord 앱의 OAuth2 Client Secret |
+   | `DISCORD_WEBHOOK_KEY` | 웹훅 자격 증명 암호화 키. 임의로 생성한 32바이트를 64자리 16진수로 입력 |
+
+   로컬에서 암호화 키를 생성해 Worker에 직접 저장하려면 아래 명령을 실행합니다. 기존 연결을 보관하려면 최초 설정에서만 생성합니다.
+
+   ```powershell
+   node -e "process.stdout.write(require('node:crypto').randomBytes(32).toString('hex'))" | node node_modules/wrangler/bin/wrangler.js secret put DISCORD_WEBHOOK_KEY --config .wrangler/deploy.jsonc
+   ```
+
+3. QR로 신청하고 텔레그램 관리자 채팅의 **승인** 버튼을 누릅니다. `/discordapplications`로 대기 신청을 다시 열 수 있습니다. 연결을 해제할 때는 같은 채팅에서 `/discordrevoke 신청번호`를 실행합니다.
+
+#### 구독자가 사용하는 방법
+
+1. 본인이 웹훅을 관리할 수 있는 Discord 서버에 비공개 텍스트 채널을 마련합니다.
+2. [가입 페이지](https://notice.bohonara.workers.dev/)의 **Discord에서 신청**을 누르거나 QR을 스캔하고 성명을 입력합니다. Discord 화면에서 비공개 채널을 선택하고 연결을 허용합니다.
+3. 승인이 완료되면 새 공지가 선택한 채널로 전송됩니다. 푸시가 필요하면 채널 **알림 설정 → 모든 메시지**를 선택합니다. 구독을 취소하려면 Discord의 채널 웹훅을 삭제하세요.
+
+Discord는 채널 연결 권한을 확인합니다. 신청자가 선택한 채널의 공개 범위는 신청자 본인이 확인해야 합니다. 신청자가 입력한 성명은 관리자 승인에 사용하며, 신청을 처리하면 데이터베이스에서 삭제합니다. 공개 공지 목록과 국문·영문 문서는 누구나 열람할 수 있습니다.
+
+## 2. Cloudflare D1 만들기
+
+1. [Cloudflare Dashboard](https://dash.cloudflare.com/)에 무료 계정을 만듭니다.
+2. **Storage & databases → D1 SQL database → Create database**로 이동합니다.
+3. 데이터베이스 이름을 `kisa-public-bohonara-support`로 지정합니다.
+4. 생성된 **Database ID**를 복사합니다.
+
+D1 데이터는 GitHub에 공개되지 않습니다.
+
+## 3. Cloudflare API token 만들기
+
+Cloudflare **My Profile → API Tokens → Create Token**에서 이 계정에 한정된 배포용 token을 만듭니다.
+
+필요한 권한:
+
+- Account → Workers Scripts → Edit
+- Account → D1 → Edit
+
+Cloudflare Account ID도 Dashboard에서 확인합니다.
+
+## 4. GitHub 설정
+
+저장소 **Settings → Secrets and variables → Actions**에서 설정합니다.
+
+### Repository secrets
+
+| 이름 | 값 |
+| --- | --- |
+| `PUBLIC_BOT_CLOUDFLARE_API_TOKEN` | 앞 단계에서 발급한 공개 봇 배포용 Cloudflare API token |
+| `PUBLIC_BOT_CLOUDFLARE_ACCOUNT_ID` | 공개 봇을 배포할 Cloudflare Account ID |
+
+Telegram token은 GitHub에 등록하지 않습니다. 첫 배포 후 Cloudflare Worker Secret에 직접 등록합니다.
+
+### Repository variables
+
+| 이름 | 값 |
+| --- | --- |
+| `CLOUDFLARE_D1_DATABASE_ID` | D1 Database ID |
+| `CLOUDFLARE_D1_DATABASE_NAME` | `kisa-public-bohonara-support` |
+| `BOT_USERNAME` | `@`를 제외한 BotFather 봇 사용자 이름 |
+| `PUBLIC_BASE_URL` | Telegram 버튼에 사용할 Worker의 공개 HTTPS 주소 |
+| `MAX_SUBSCRIBERS` | 권장 `50` |
+| `BROADCAST_BATCH_SIZE` | 권장 `20`, 최대 `20` |
+| `MAX_PENDING_APPLICATIONS` | 권장 `100` |
+| `MAX_APPLICATIONS_PER_HOUR` | 권장 `20` |
+| `ADMIN_NOTIFICATION_BATCH_SIZE` | 권장 `5`, 최대 `5` |
+| `CLOUDFLARE_DEPLOY_ENABLED` | 첫 배포를 시작할 때 `true` |
+| `ENABLE_CRON` | 처음에는 반드시 `false` |
+
+`CLOUDFLARE_DEPLOY_ENABLED`가 `true`가 되기 전에는 GitHub Actions가 테스트만 실행하고 Cloudflare에는 배포하지 않습니다.
+
+## 5. 첫 배포
+
+1. **Actions → Verify and deploy bot → Run workflow**를 실행합니다.
+2. D1 migration과 Worker 배포가 성공했는지 확인합니다.
+3. Cloudflare **Workers & Pages**에서 생성된 `notice` Worker를 엽니다.
+4. `https://notice.<계정-서브도메인>.workers.dev/` 주소를 복사합니다. 이 주소가 가입 QR 페이지입니다.
+
+첫 배포에서는 `ENABLE_CRON=false`이므로 아직 RSS 확인 작업이 실행되지 않습니다.
+
+## 6. Worker Secrets 등록
+
+Cloudflare Worker의 **Settings → Variables and Secrets → Add**에서 모두 **Secret** 유형으로 등록합니다.
+
+| Secret | 값 |
+| --- | --- |
+| `TELEGRAM_BOT_TOKEN` | BotFather HTTP API token |
+| `TELEGRAM_WEBHOOK_SECRET` | `setup:telegram`이 출력한 값 |
+| `ADMIN_TELEGRAM_USER_ID` | `setup:telegram`이 출력한 관리자 숫자 ID |
+| `NOTICE_WORKFLOW_TOKEN` | 새 RSS 공지를 발견하면 포맷터를 즉시 실행하는 GitHub PAT (선택 사항) |
+
+이 값들은 Cloudflare에 암호화되어 저장되고 공개 GitHub 저장소에는 들어가지 않습니다.
+
+## 7. Telegram Webhook 연결 자동화
+
+개인 PC PowerShell에서 실행합니다. `WORKER_BASE_URL`에는 아래 예시의 `YOUR-SUBDOMAIN`을 실제 Cloudflare 계정 서브도메인으로 바꿔 넣습니다.
+
+```powershell
+$env:TELEGRAM_BOT_TOKEN = "BotFather_token"
+$env:TELEGRAM_WEBHOOK_SECRET = "Cloudflare에_등록한_동일한_값"
+$env:ADMIN_TELEGRAM_USER_ID = "관리자_숫자_ID"
+$env:WORKER_BASE_URL = "https://notice.YOUR-SUBDOMAIN.workers.dev"
+npm run setup:telegram
+Remove-Item Env:TELEGRAM_BOT_TOKEN
+Remove-Item Env:TELEGRAM_WEBHOOK_SECRET
+Remove-Item Env:ADMIN_TELEGRAM_USER_ID
+Remove-Item Env:WORKER_BASE_URL
+```
+
+이 실행이 Telegram의 `message`, `callback_query` webhook과 봇 명령·설명을 함께 설정합니다.
+
+상태 확인:
+
+```text
+https://notice.YOUR-SUBDOMAIN.workers.dev/healthz
+```
+
+가입 페이지는 Worker 기본 주소입니다.
+
+```text
+https://notice.YOUR-SUBDOMAIN.workers.dev/
+```
+
+## 8. 1분 공지 확인 활성화
+
+1. GitHub Repository variable `ENABLE_CRON`을 `true`로 변경합니다.
+2. **Verify and deploy bot** workflow를 다시 실행합니다.
+3. 첫 Cron 실행은 현재 RSS를 기준 상태로만 저장하며 기존 공지는 발송하지 않습니다. 이후 가입 신청 알림과 새 공지 확인이 매분 실행됩니다.
+
+## 9. 가입 승인과 보조 초대 링크
+
+신규 신청은 관리자 Telegram에 승인·거절 버튼으로 도착합니다. 버튼을 사용할 수 없을 때는 `/approve CHAT_ID` 또는 `/reject CHAT_ID`로 동일하게 처리할 수 있습니다.
+
+신청 정보가 비어 있는 이전 신청은 Telegram에서 `/알림신청 성명`을 보내면 다시 접수됩니다.
+
+거절한 사용자의 재신청을 허용하려면 다음 명령으로 거절 기록을 삭제합니다.
+
+```text
+/reopen CHAT_ID
+```
+
+승인 절차를 건너뛰는 제한형 링크가 필요할 때만 기존 초대 명령을 사용합니다.
+
+관리자 계정으로 새 봇에게 보냅니다.
+
+```text
+/invite 1 7
+```
+
+한 번 사용할 수 있고 7일 뒤 만료되는 초대 링크가 생성됩니다. 여러 명이 함께 사용할 링크는 다음처럼 만들 수 있습니다.
+
+```text
+/invite 10 3
+```
+
+### 명령어
+
+| 명령 | 권한 | 설명 |
+| --- | --- | --- |
+| `/start` | 신청자 | 가입 방법 안내 |
+| `/알림신청 성명` | 신청자 | 본인의 성명으로 승인 신청 |
+| `/start 초대코드` | 초대 사용자 | 관리자 생성 링크로 즉시 구독 |
+| `/status` | 사용자 | 구독 상태 확인 |
+| `/stop` | 사용자 | 구독 해제 및 구독 데이터 삭제 |
+| `/applications` | 관리자 | 승인 대기 신청 수 확인 |
+| `/approve CHAT_ID` | 관리자 | 가입 신청 승인 |
+| `/reject CHAT_ID` | 관리자 | 가입 신청 거절 |
+| `/reopen CHAT_ID` | 관리자 | 다시 신청할 수 있도록 기록 삭제 |
+| `/invite [횟수] [일수]` | 관리자 | 초대 링크 생성 |
+| `/subscribers` | 관리자 | 현재 구독자 수 확인 |
+| `/revoke CHAT_ID` | 관리자 | 특정 구독 해제 |
+
+## 로컬 검증
+
+```powershell
+npm ci
+npm run check
+```
+
+## 보안 원칙
+
+- 모든 Secret은 GitHub 또는 Cloudflare의 Secret 저장소에만 입력합니다.
+- 구독자 목록을 저장소, 로그, Artifact에 출력하지 않습니다.
+- 승인 판단에 사용한 계정명과 Telegram 프로필 정보는 신청 처리 즉시 D1에서 지웁니다.
+- 공개 가입 페이지에는 관리자 기능이나 D1 접근 경로를 두지 않습니다.
+- 초대 링크는 필요한 사람에게만 전달하고 넉넉한 다회용 링크를 만들지 않습니다.
+- `MAX_SUBSCRIBERS`와 `BROADCAST_BATCH_SIZE`를 불필요하게 높이지 않습니다.
+
+취약점 제보 방법은 [SECURITY.md](../SECURITY.md), 저장 데이터 범위는 [PRIVACY.md](../PRIVACY.md)를 참고하세요.
+
+## 국문·영문 공지 게시
+
+공지 목록, 국문·영문 페이지와 텍스트 다운로드는 기존 주소에서 Worker가 D1 데이터를 읽어 제공합니다.
+`site/notices/`는 검증을 마친 문서와 재게시용 스냅숏을 보관합니다. Python 포맷터가 기존 번역 경로와 검증 규칙을 적용하고, 국문·영문 HTML과 다운로드 파일을 한 번에 D1에 저장합니다. 게시가 끝날 때까지 기존 Telegram 링크에는 준비 화면이 표시됩니다.
+
+- **새 공지 감지 즉시 시작:** 이 저장소에만 접근 가능한 GitHub fine-grained PAT에 **Actions: Read and write**를 부여하고 Worker Secret `NOTICE_WORKFLOW_TOKEN`에 등록합니다. 토큰이 없거나 호출이 실패하면 5분 간격으로 예약된 RSS 확인이 이어받습니다. GitHub 예약 실행은 지연될 수 있습니다.
+- **번역 설정:** 공개 봇 저장소의 Actions Secrets에 기존 Gemini 키를 `PUBLIC_NOTICE_GEMINI_API_KEY`로 등록합니다. 모델을 지정했다면 Actions Variable `PUBLIC_NOTICE_GEMINI_MODEL`에도 같은 모델명을 넣습니다. Workers AI를 사용 중이면 기존 계정 ID와 API 토큰을 각각 `PUBLIC_NOTICE_TRANSLATION_ACCOUNT_ID`와 `PUBLIC_NOTICE_TRANSLATION_API_TOKEN`으로 등록합니다. MyMemory 연락 이메일은 `PUBLIC_NOTICE_MYMEMORY_CONTACT_EMAIL`을 사용합니다.
+- **문서 게시 인증:** `Publish KISA notices to D1` 워크플로는 GitHub Actions의 단기 OIDC 토큰을 사용합니다. D1 게시를 위한 장기 Cloudflare 토큰을 추가로 저장할 필요가 없습니다. Worker 변수 `NOTICE_WORKFLOW_REPOSITORY`는 게시를 허용할 GitHub 저장소 이름입니다. CI용 Wrangler 설정을 만들 때 `github.repository`로 지정합니다.
+- **복구:** 별도 예약 실행은 30분마다 KISA 게시판 최근 14일을 대조하고, 매일 한 번 및 수동 전체 실행은 최근 3개월을 확인합니다. 번역 실패는 큐에 다시 넣고, D1에 덜 올라간 문서는 다음 실행에서 다시 게시합니다.
+
+`python -m unittest discover -s tests`로 번역 및 서식 검사를, `npm run check`로 Worker 검사를 실행합니다.
