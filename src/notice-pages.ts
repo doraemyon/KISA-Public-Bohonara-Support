@@ -106,7 +106,10 @@ function renderArchiveHtml(response: Response, source: URL, base: URL, language?
     .on("header.site-header", {
       element(element) {
         element.replace(
-          renderSiteHeader(archiveLabel(language), "/notice", { alignWithArchive: !language }),
+          renderSiteHeader(archiveLabel(language), "/notice", {
+            alignWithArchive: !language,
+            link: language ? undefined : "subscribe",
+          }),
           { html: true },
         );
       },

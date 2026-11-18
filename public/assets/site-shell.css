@@ -45,13 +45,18 @@ main.public-content {
   text-decoration: none;
 }
 
-.archive-link {
+.topbar-link {
+  display: inline-flex;
+  min-height: 44px;
+  flex: none;
+  align-items: center;
   color: #fff;
   font-size: 12px;
   text-decoration: none;
 }
 
-.archive-link:hover {
+.topbar-link:hover,
+.topbar-link:focus-visible {
   text-decoration: underline;
   text-underline-offset: 3px;
 }

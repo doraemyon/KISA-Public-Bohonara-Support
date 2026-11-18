@@ -107,7 +107,7 @@ export function renderOnboardingPage(env: Env): string {
   </style>
 </head>
 <body>
-  ${renderSiteHeader("보안공지 알리미", "/", { showArchiveLink: true })}
+  ${renderSiteHeader("보안공지 알리미", "/", { link: "archive" })}
   <main class="public-content">
     <header class="intro">
       <p class="eyebrow">비공식 KISA 보호나라 보안공지</p>
