@@ -59,6 +59,7 @@ function htmlResponse(body: string): Response {
       "Content-Security-Policy":
         "default-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
       "Referrer-Policy": "no-referrer",
+      "Strict-Transport-Security": "max-age=31536000",
       "X-Content-Type-Options": "nosniff",
       "X-Frame-Options": "DENY",
     },
@@ -523,6 +524,13 @@ async function runScheduled(env: Env): Promise<void> {
 export default {
   async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+    if (url.protocol === "http:" && url.host === publicSiteUrl(env)?.host) {
+      if (request.method !== "GET" && request.method !== "HEAD") {
+        return jsonResponse({ ok: false, error: "HTTPS required" }, 400);
+      }
+      url.protocol = "https:";
+      return Response.redirect(url.href, 308);
+    }
     if (url.pathname === "/internal/notice-publication") {
       return handleNoticePublication(request, env);
     }

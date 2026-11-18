@@ -12,14 +12,17 @@ const STATE_TTL_SECONDS = 600;
 
 function signupPage(title: string, detail: string, status: number, clearCookie = false, showForm = false): Response {
   const headers = new Headers({
-    "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "Referrer-Policy": "no-referrer",
+    "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store",
+    // Browsers send Origin: null on form POSTs from documents using no-referrer.
+    "Referrer-Policy": showForm ? "same-origin" : "no-referrer",
+    "Strict-Transport-Security": "max-age=31536000",
     "X-Robots-Tag": "noindex",
     "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; form-action 'self' https://discord.com; base-uri 'none'; frame-ancestors 'none'",
   });
   if (clearCookie) headers.set("Set-Cookie", COOKIE_NAME + "=; Secure; HttpOnly; SameSite=Lax; Path=/; Max-Age=0");
   const form = showForm ? '<form method="post" action="' + DISCORD_AUTH_PATH + '">' +
     '<label for="name">성명</label><input id="name" name="name" maxlength="48" required autocomplete="name">' +
-    '<small>성명은 관리자 승인에만 사용됩니다.</small><button type="submit">Discord에서 채널 선택</button></form>' : "";
+    '<small>성명은 승인 심사를 위해 관리자에게 Telegram으로 전달됩니다.</small><button type="submit">Discord에서 채널 선택</button></form>' : "";
   return new Response('<!doctype html><html lang="ko"><head><meta charset="utf-8">' +
     '<meta name="viewport" content="width=device-width,initial-scale=1"><title>Discord 보안공지 신청</title>' +
     '<style>body{margin:0;background:#0d1117;color:#f0f6fc;font:16px/1.6 system-ui,sans-serif}' +

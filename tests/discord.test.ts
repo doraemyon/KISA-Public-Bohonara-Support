@@ -2,6 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { discordSignupConfig, openWebhook } from "../src/discord-connection";
 import { completeDiscordSignup, startDiscordSignup } from "../src/discord-signup";
 import { discordNoticeMessage, handleDiscordCallback } from "../src/discord";
+import worker from "../src/index";
 import { renderOnboardingPage } from "../src/onboarding";
 import type { Env, TelegramCallbackQuery } from "../src/types";
 
@@ -30,12 +31,40 @@ it("renders a QR for the signup page only when OAuth settings are available", ()
   expect(renderOnboardingPage(disabled)).toContain("Discord 구독 신청은 연결 준비 중입니다.");
 });
 
+it("requires HTTPS on the public signup form", async () => {
+  const signupUrl = origin + "/discord/subscribe";
+  const insecureUrl = signupUrl.replace("https:", "http:");
+  const ctx = {} as ExecutionContext;
+  const get = await worker.fetch(new Request(insecureUrl), env, ctx);
+  expect(get.status).toBe(308);
+  expect(get.headers.get("Location")).toBe(signupUrl);
+  const post = await worker.fetch(new Request(insecureUrl, {
+    method: "POST", headers: { Origin: origin }, body: new URLSearchParams({ name: "가상검증" }),
+  }), env, ctx);
+  expect(post.status).toBe(400);
+  expect(post.headers.has("Location")).toBe(false);
+  const form = await worker.fetch(new Request(signupUrl), env, ctx);
+  expect(form.headers.get("Strict-Transport-Security")).toBe("max-age=31536000");
+});
+
+it.each([null, "null", "https://other.example.test"])("rejects the form POST from origin %s", async (source) => {
+  const prepare = vi.fn();
+  const live = { ...env, DB: { prepare } as unknown as D1Database };
+  const response = await startDiscordSignup(new Request(origin + "/discord/subscribe", {
+    method: "POST", headers: source ? { Origin: source } : {},
+    body: new URLSearchParams({ name: "가상검증" }),
+  }), live);
+  expect(response.status).toBe(403);
+  expect(prepare).not.toHaveBeenCalled();
+});
+
 it("redeems a same-browser state once and stores only an encrypted webhook for review", async () => {
   const insert = vi.fn(async () => ({ meta: { changes: 1 } }));
   const consume = vi.fn().mockResolvedValueOnce({ applicant_name: "김하늘" }).mockResolvedValue(null);
   const bind = vi.fn(() => ({ first: consume, run: insert }));
   const live = { ...env, DB: { prepare: () => ({ bind }) } as unknown as D1Database };
   const start = await startDiscordSignup(new Request(origin + "/discord/subscribe"), live);
+  expect(start.headers.get("Referrer-Policy")).toBe("same-origin");
   expect(await start.text()).toContain('name="name"');
   expect(bind).not.toHaveBeenCalled();
   const go = await startDiscordSignup(new Request(origin + "/discord/subscribe", {
@@ -43,10 +72,12 @@ it("redeems a same-browser state once and stores only an encrypted webhook for r
     body: new URLSearchParams({ name: "김하늘" }),
   }), live);
   expect(go.status).toBe(303);
+  expect(go.headers.get("Referrer-Policy")).toBe("no-referrer");
   const auth = new URL(go.headers.get("Location")!);
   expect(auth.origin).toBe("https://discord.com");
   expect(auth.searchParams.get("scope")).toBe("identify webhook.incoming");
   expect(auth.href).not.toContain(env.DISCORD_CLIENT_SECRET);
+  expect(decodeURIComponent(auth.href)).not.toContain("김하늘");
   const state = auth.searchParams.get("state");
   const cookie = go.headers.get("Set-Cookie")!.split(";")[0];
   const callbackUrl = origin + "/discord/callback?code=callback-code&state=" + state;
