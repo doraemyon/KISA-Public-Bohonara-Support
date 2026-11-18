@@ -1,12 +1,12 @@
 import { maxSubscribers } from "./config";
-import { discordApi, discordSignupConfig, openWebhook, removeWebhook, webhookPath } from "./discord-connection";
+import { discordApi, discordId, discordSignupConfig, openWebhook, removeWebhook, webhookPath } from "./discord-connection";
 import { noticeKeyboard } from "./notice-pages";
 import { answerTelegramCallback, editTelegramMessage, sendTelegramMessage } from "./telegram";
 import type { Env, TelegramCallbackQuery } from "./types";
 
 interface Pending { id: number; applicant_name: string; discord_user_id: string; requested_at: string; }
 interface Delivery {
-  subscription_id: number; notice_id: string; title: string; link: string;
+  subscription_id: number; discord_user_id: string; notice_id: string; title: string; link: string;
   published_at: string; attempts: number; sealed_webhook: string; is_test: number;
 }
 
@@ -114,7 +114,12 @@ async function notifyAdmin(env: Env, now: string): Promise<void> {
   }
 }
 
-export function discordNoticeMessage(env: Env, notice: Pick<Delivery, "title" | "link" | "published_at">, isTest = false) {
+export function discordNoticeMessage(
+  env: Env,
+  notice: Pick<Delivery, "title" | "link" | "published_at" | "discord_user_id">,
+  isTest = false,
+) {
+  const recipient = discordId(notice.discord_user_id) ? notice.discord_user_id : undefined;
   const published = notice.published_at ? { description: "게시: " + notice.published_at } : {};
   const noticeTitle = (isTest ? "[연동 테스트] " : "") + notice.title;
   const buttons = noticeKeyboard(env, notice.link).flatMap((row) =>
@@ -122,9 +127,10 @@ export function discordNoticeMessage(env: Env, notice: Pick<Delivery, "title" | 
   );
   return {
     username: "보호나라 공지 알리미",
+    content: recipient ? "<@" + recipient + ">" : undefined,
     embeds: [{ title: Array.from(noticeTitle).slice(0, 128).join(""), ...published, color: 0x5865f2 }],
     components: [{ type: 1, components: buttons }],
-    allowed_mentions: { parse: [] },
+    allowed_mentions: { parse: [], users: recipient ? [recipient] : [] },
   };
 }
 
@@ -183,7 +189,7 @@ export async function processDiscordNotices(env: Env): Promise<void> {
     ),
   ]);
   const due = await env.DB.prepare(
-    "SELECT d.subscription_id, d.notice_id, n.title, n.link, n.published_at, d.attempts, s.sealed_webhook, d.is_test " +
+    "SELECT d.subscription_id, s.discord_user_id, d.notice_id, n.title, n.link, n.published_at, d.attempts, s.sealed_webhook, d.is_test " +
     "FROM discord_webhook_deliveries d JOIN discord_webhook_subscriptions s ON s.id = d.subscription_id " +
     "JOIN notices n USING (notice_id) WHERE s.approved_at IS NOT NULL AND d.sent_at IS NULL AND d.next_attempt_at <= ?1 " +
     "AND (d.is_test = 1 OR NOT EXISTS (SELECT 1 FROM discord_webhook_deliveries p WHERE p.subscription_id = d.subscription_id " +

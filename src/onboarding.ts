@@ -207,7 +207,8 @@ function renderDiscordCard(signupUrl: string | undefined): string {
           <li class="step">
             <span class="step__number" aria-hidden="true">4</span>
             <div><strong class="step__title">관리자 승인 기다리기</strong>
-              <p class="step__detail">승인되면 새 보안공지를 받습니다. 푸시를 받으려면 채널 알림을 <strong>모든 메시지</strong>로 설정하세요.</p></div>
+              <p class="step__detail">승인되면 새 공지마다 연결한 Discord 계정이 멘션됩니다.</p>
+              <p class="step__detail">휴대폰에서 받으려면 서버의 <strong>모바일 푸시 알림</strong>을 켜고, 서버와 채널의 알림이 음소거되어 있지 않은지 확인하세요.</p></div>
           </li>
         </ol>
         <p class="privacy-note">같은 QR로 신청해도 가입 화면에 운영자나 다른 구독자의 Discord 계정·서버가 표시되지 않습니다.</p>

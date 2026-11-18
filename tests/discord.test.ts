@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { discordSignupConfig, openWebhook } from "../src/discord-connection";
+import { discordSignupConfig, openWebhook, sealWebhook } from "../src/discord-connection";
 import { completeDiscordSignup, startDiscordSignup } from "../src/discord-signup";
-import { discordNoticeMessage, handleDiscordCallback } from "../src/discord";
+import { discordNoticeMessage, handleDiscordCallback, processDiscordNotices } from "../src/discord";
 import worker from "../src/index";
 import { renderOnboardingPage } from "../src/onboarding";
 import type { Env, TelegramCallbackQuery } from "../src/types";
@@ -118,14 +118,42 @@ it("restricts approval to the configured Telegram admin chat", async () => {
   expect(send).toHaveBeenCalledTimes(2);
 });
 
-it("creates the notice buttons without pinging others", () => {
+it("keeps notice links and sends no mention for an invalid recipient", () => {
   const message = discordNoticeMessage(env, {
-    title: "@everyone 보안 공지", link: "https://www.boho.or.kr/kr/bbs/view.do?nttId=72263", published_at: "2026-11-17",
+    discord_user_id: "@everyone", title: "@everyone 보안 공지",
+    link: "https://www.boho.or.kr/kr/bbs/view.do?nttId=72263", published_at: "2026-11-17",
   });
-  const testMessage = discordNoticeMessage(env, {
-    title: "보안 공지", link: "https://www.boho.or.kr/kr/bbs/view.do?nttId=72263", published_at: "",
-  }, true);
-  expect(testMessage.embeds[0].title).toBe("[연동 테스트] 보안 공지");
-  expect(message.allowed_mentions).toEqual({ parse: [] });
+  expect(message.content).toBeUndefined();
+  expect(message.allowed_mentions).toEqual({ parse: [], users: [] });
   expect(message.components[0].components.map((button) => button.label)).toEqual(["공지 열기", "국문 공지", "영문 공지"]);
+});
+
+it.each([0, 1])("mentions only the subscriber in queued Discord notices (test: %i)", async (isTest) => {
+  const recipient = "123456789012345676";
+  const delivery = {
+    subscription_id: 2, discord_user_id: recipient, notice_id: "72263",
+    title: "@everyone 보안 공지", link: "https://www.boho.or.kr/kr/bbs/view.do?nttId=72263",
+    published_at: "2026-11-17", attempts: 0, is_test: isTest,
+    sealed_webhook: await sealWebhook(hook, env.DISCORD_WEBHOOK_KEY!),
+  };
+  const prepare = vi.fn((sql: string) => ({
+    bind: () => ({
+      all: async () => ({ results: sql.startsWith("SELECT d.subscription_id,") ? [delivery] : [] }),
+      run: async () => ({ meta: { changes: 1 } }),
+    }),
+  }));
+  const live = { ...env, DB: { prepare, batch: async () => [] } as unknown as D1Database };
+  const send = vi.fn(async (_url: string, _options: RequestInit) => new Response(null, { status: 204 }));
+  vi.stubGlobal("fetch", send);
+
+  await processDiscordNotices(live);
+
+  expect(prepare).toHaveBeenCalledWith(expect.stringMatching(/^SELECT d\.subscription_id, s\.discord_user_id,/));
+  expect(send).toHaveBeenCalledTimes(1);
+  expect(JSON.parse(String(send.mock.calls[0][1].body))).toMatchObject({
+    content: "<@" + recipient + ">",
+    allowed_mentions: { parse: [], users: [recipient] },
+    embeds: [{ title: isTest ? "[연동 테스트] " + delivery.title : delivery.title }],
+    components: [{ components: [{ label: "공지 열기" }, { label: "국문 공지" }, { label: "영문 공지" }] }],
+  });
 });
