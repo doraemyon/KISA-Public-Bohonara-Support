@@ -186,7 +186,7 @@ function renderDiscordCard(signupUrl: string | undefined): string {
           <li class="step">
             <span class="step__number" aria-hidden="true">1</span>
             <div><strong class="step__title">Discord 연결 화면 열기</strong>
-              <p class="step__detail">QR을 스캔하거나 <a href="${escapeHtml(signupUrl)}">Discord에서 신청</a>을 누르세요.</p></div>
+              <p class="step__detail">QR을 스캔하거나 <a href="${escapeHtml(signupUrl)}">Discord에서 신청</a>을 누른 뒤 <strong>본인의 성명</strong>을 입력하세요.</p></div>
           </li>
           <li class="step">
             <span class="step__number" aria-hidden="true">2</span>
@@ -210,7 +210,7 @@ function renderDiscordCard(signupUrl: string | undefined): string {
         <div class="qr">${renderSignupQr(signupUrl, "discord")}</div>
         <h2>Discord에서 신청</h2>
         <a class="button discord" href="${escapeHtml(signupUrl)}">Discord에서 신청</a>
-        <p class="fineprint">Discord 계정 이름은 승인에 사용되며 신청 처리 후 삭제됩니다.</p>
+        <p class="fineprint">신청 성명은 관리자 승인에 사용되며 신청 처리 후 삭제됩니다.</p>
       </aside>
     </section>`;
 }

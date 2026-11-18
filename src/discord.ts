@@ -4,19 +4,19 @@ import { noticeKeyboard } from "./notice-pages";
 import { answerTelegramCallback, editTelegramMessage, sendTelegramMessage } from "./telegram";
 import type { Env, TelegramCallbackQuery } from "./types";
 
-interface Pending { id: number; name: string; discord_user_id: string; requested_at: string; }
+interface Pending { id: number; applicant_name: string; discord_user_id: string; requested_at: string; }
 interface Delivery {
   subscription_id: number; notice_id: string; title: string; link: string;
-  published_at: string; attempts: number; sealed_webhook: string;
+  published_at: string; attempts: number; sealed_webhook: string; is_test: number;
 }
 
 async function sendRequest(env: Env, admin: string, row: Pending): Promise<void> {
   await sendTelegramMessage(env, admin, [
-    "[Discord 알림 구독 신청]", "신청 번호: " + row.id, "Discord 계정: " + row.name,
+    "[Discord 알림 구독 신청]", "신청 번호: " + row.id, "성명: " + row.applicant_name,
     "Discord 사용자 ID: " + row.discord_user_id, "접수: " + row.requested_at,
   ].join("\n"), [[
-    { text: "승인", callback_data: "discord:approve:" + row.id },
-    { text: "거절", callback_data: "discord:reject:" + row.id },
+    { text: "승인", callback_data: "discord-name:approve:" + row.id },
+    { text: "거절", callback_data: "discord-name:reject:" + row.id },
   ]]);
 }
 
@@ -36,8 +36,8 @@ export async function handleDiscordAdminCommand(env: Env, chatId: string, name: 
   }
   if (name !== "discordapplications") return false;
   const rows = await env.DB.prepare(
-    "SELECT id, name, discord_user_id, requested_at FROM discord_webhook_subscriptions " +
-    "WHERE approved_at IS NULL ORDER BY requested_at LIMIT 5",
+    "SELECT id, applicant_name, discord_user_id, requested_at FROM discord_webhook_subscriptions " +
+    "WHERE approved_at IS NULL AND applicant_name IS NOT NULL ORDER BY requested_at LIMIT 5",
   ).all<Pending>();
   if (!rows.results.length) await sendTelegramMessage(env, chatId, "대기 중인 Discord 신청이 없습니다.");
   for (const row of rows.results) await sendRequest(env, chatId, row);
@@ -54,24 +54,30 @@ async function removeStoredWebhook(env: Env, sealed: string): Promise<void> {
 }
 
 export async function handleDiscordCallback(env: Env, callback: TelegramCallbackQuery): Promise<boolean> {
-  const action = /^discord:(approve|reject):(\d{1,15})$/.exec(callback.data ?? "");
+  const action = /^(discord|discord-name):(approve|reject):(\d{1,15})$/.exec(callback.data ?? "");
   if (!action) return false;
   const admin = env.ADMIN_TELEGRAM_USER_ID.trim();
   if (!admin || String(callback.from.id) !== admin || String(callback.message?.chat.id) !== admin ||
       callback.message?.chat.type !== "private") return true;
-  const id = Number(action[2]);
+  const id = Number(action[3]);
+  const legacyAction = action[1] === "discord";
   let label: string;
-  if (action[1] === "reject") {
+  if (legacyAction && action[2] === "approve") {
+    await answerTelegramCallback(env, callback.id, "성명 확인이 필요합니다. 신청자에게 QR로 다시 신청해 달라고 안내해 주세요.");
+    return true;
+  }
+  if (action[2] === "reject") {
     const row = await env.DB.prepare(
-      "DELETE FROM discord_webhook_subscriptions WHERE id = ?1 AND approved_at IS NULL RETURNING sealed_webhook",
+      "DELETE FROM discord_webhook_subscriptions WHERE id = ?1 AND approved_at IS NULL " +
+      (legacyAction ? "AND applicant_name IS NULL " : "AND applicant_name IS NOT NULL ") + "RETURNING sealed_webhook",
     ).bind(id).first<{ sealed_webhook: string }>();
     label = row ? "거절됨" : "이미 처리된 신청";
     await answerTelegramCallback(env, callback.id, label);
     if (row) await removeStoredWebhook(env, row.sealed_webhook);
   } else {
     const result = await env.DB.prepare(
-      "UPDATE discord_webhook_subscriptions SET approved_at = ?2, name = NULL " +
-      "WHERE id = ?1 AND approved_at IS NULL " +
+      "UPDATE discord_webhook_subscriptions SET approved_at = ?2, name = NULL, applicant_name = NULL " +
+      "WHERE id = ?1 AND approved_at IS NULL AND applicant_name IS NOT NULL " +
       "AND (SELECT COUNT(*) FROM discord_webhook_subscriptions WHERE approved_at IS NOT NULL) < ?3",
     ).bind(id, new Date().toISOString(), maxSubscribers(env)).run();
     if (result.meta.changes !== 1) {
@@ -89,8 +95,8 @@ async function notifyAdmin(env: Env, now: string): Promise<void> {
   const admin = env.ADMIN_TELEGRAM_USER_ID.trim();
   if (!admin) return;
   const rows = await env.DB.prepare(
-    "SELECT id, name, discord_user_id, requested_at FROM discord_webhook_subscriptions " +
-    "WHERE approved_at IS NULL AND notified_at IS NULL AND notify_after <= ?1 ORDER BY requested_at LIMIT 3",
+    "SELECT id, applicant_name, discord_user_id, requested_at FROM discord_webhook_subscriptions " +
+    "WHERE approved_at IS NULL AND applicant_name IS NOT NULL AND notified_at IS NULL AND notify_after <= ?1 ORDER BY requested_at LIMIT 3",
   ).bind(now).all<Pending>();
   for (const row of rows.results) {
     const lease = await env.DB.prepare(
@@ -108,14 +114,15 @@ async function notifyAdmin(env: Env, now: string): Promise<void> {
   }
 }
 
-export function discordNoticeMessage(env: Env, notice: Pick<Delivery, "title" | "link" | "published_at">) {
+export function discordNoticeMessage(env: Env, notice: Pick<Delivery, "title" | "link" | "published_at">, isTest = false) {
   const published = notice.published_at ? { description: "게시: " + notice.published_at } : {};
+  const noticeTitle = (isTest ? "[연동 테스트] " : "") + notice.title;
   const buttons = noticeKeyboard(env, notice.link).flatMap((row) =>
     row.flatMap(({ text, url }) => url ? [{ type: 2, style: 5, label: text, url }] : []),
   );
   return {
     username: "보호나라 공지 알리미",
-    embeds: [{ title: Array.from(notice.title).slice(0, 128).join(""), ...published, color: 0x5865f2 }],
+    embeds: [{ title: Array.from(noticeTitle).slice(0, 128).join(""), ...published, color: 0x5865f2 }],
     components: [{ type: 1, components: buttons }],
     allowed_mentions: { parse: [] },
   };
@@ -132,7 +139,7 @@ async function deliver(env: Env, delivery: Delivery, key: string, now: string): 
     const hook = await openWebhook(delivery.sealed_webhook, key);
     const response = await discordApi(webhookPath(hook) + "?wait=true&with_components=true", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(discordNoticeMessage(env, delivery)),
+      body: JSON.stringify(discordNoticeMessage(env, delivery, delivery.is_test === 1)),
     });
     if (response.status === 429) {
       const body = await response.json<{ retry_after?: number }>().catch(() => null);
@@ -176,11 +183,11 @@ export async function processDiscordNotices(env: Env): Promise<void> {
     ),
   ]);
   const due = await env.DB.prepare(
-    "SELECT d.subscription_id, d.notice_id, n.title, n.link, n.published_at, d.attempts, s.sealed_webhook " +
+    "SELECT d.subscription_id, d.notice_id, n.title, n.link, n.published_at, d.attempts, s.sealed_webhook, d.is_test " +
     "FROM discord_webhook_deliveries d JOIN discord_webhook_subscriptions s ON s.id = d.subscription_id " +
     "JOIN notices n USING (notice_id) WHERE s.approved_at IS NOT NULL AND d.sent_at IS NULL AND d.next_attempt_at <= ?1 " +
-    "AND NOT EXISTS (SELECT 1 FROM discord_webhook_deliveries p WHERE p.subscription_id = d.subscription_id " +
-    "AND p.sent_at IS NULL AND p.notice_id < d.notice_id) ORDER BY d.next_attempt_at LIMIT 10",
+    "AND (d.is_test = 1 OR NOT EXISTS (SELECT 1 FROM discord_webhook_deliveries p WHERE p.subscription_id = d.subscription_id " +
+    "AND p.sent_at IS NULL AND p.is_test = 0 AND p.notice_id < d.notice_id)) ORDER BY d.is_test DESC, d.next_attempt_at LIMIT 10",
   ).bind(now).all<Delivery>();
 
   const expiration = new Date(Date.now() - 30 * 86400_000).toISOString();

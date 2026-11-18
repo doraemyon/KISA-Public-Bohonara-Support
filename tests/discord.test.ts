@@ -32,10 +32,16 @@ it("renders a QR for the signup page only when OAuth settings are available", ()
 
 it("redeems a same-browser state once and stores only an encrypted webhook for review", async () => {
   const insert = vi.fn(async () => ({ meta: { changes: 1 } }));
-  const consume = vi.fn().mockResolvedValueOnce({ state_hash: "used" }).mockResolvedValue(null);
+  const consume = vi.fn().mockResolvedValueOnce({ applicant_name: "김하늘" }).mockResolvedValue(null);
   const bind = vi.fn(() => ({ first: consume, run: insert }));
   const live = { ...env, DB: { prepare: () => ({ bind }) } as unknown as D1Database };
-  const go = await startDiscordSignup(new Request(origin + "/discord/subscribe"), live);
+  const start = await startDiscordSignup(new Request(origin + "/discord/subscribe"), live);
+  expect(await start.text()).toContain('name="name"');
+  expect(bind).not.toHaveBeenCalled();
+  const go = await startDiscordSignup(new Request(origin + "/discord/subscribe", {
+    method: "POST", headers: { Origin: origin },
+    body: new URLSearchParams({ name: "김하늘" }),
+  }), live);
   expect(go.status).toBe(303);
   const auth = new URL(go.headers.get("Location")!);
   expect(auth.origin).toBe("https://discord.com");
@@ -47,7 +53,7 @@ it("redeems a same-browser state once and stores only an encrypted webhook for r
 
   const network = vi.fn(async (url: string) => url.endsWith("/oauth2/token")
     ? Response.json({ webhook: hook, access_token: "short-lived-access" })
-    : Response.json({ id: "123456789012345676", username: "haneul", global_name: "김하늘" }));
+    : Response.json({ id: "123456789012345676", username: "other-name", global_name: "다른 표시 이름" }));
   vi.stubGlobal("fetch", network);
   expect((await completeDiscordSignup(new Request(callbackUrl), live)).status).toBe(403);
   expect(network).not.toHaveBeenCalled();
@@ -56,7 +62,7 @@ it("redeems a same-browser state once and stores only an encrypted webhook for r
   expect(network).toHaveBeenCalledTimes(2);
   const [, channelId, sealed, name] = bind.mock.calls.at(-2) as unknown as string[];
   expect(channelId).toBe(hook.channel_id);
-  expect(name).toBe("김하늘 @haneul");
+  expect(name).toBe("김하늘");
   expect(sealed).not.toContain(hook.token);
   expect(await openWebhook(sealed, env.DISCORD_WEBHOOK_KEY!)).toEqual(hook);
 });
@@ -67,12 +73,15 @@ it("restricts approval to the configured Telegram admin chat", async () => {
   const send = vi.fn(async () => Response.json({ ok: true }));
   vi.stubGlobal("fetch", send);
   const callback: TelegramCallbackQuery = {
-    id: "1", data: "discord:approve:1", from: { id: 100 },
+    id: "1", data: "discord-name:approve:1", from: { id: 100 },
     message: { message_id: 1, chat: { id: 101, type: "private" } },
   };
   await handleDiscordCallback(live, callback);
   expect(db).not.toHaveBeenCalled();
   callback.message!.chat.id = 100;
+  await handleDiscordCallback(live, { ...callback, data: "discord:approve:1" });
+  expect(db).not.toHaveBeenCalled();
+  send.mockClear();
   await handleDiscordCallback(live, callback);
   expect(db).toHaveBeenCalledTimes(1);
   expect(send).toHaveBeenCalledTimes(2);
@@ -82,6 +91,10 @@ it("creates the notice buttons without pinging others", () => {
   const message = discordNoticeMessage(env, {
     title: "@everyone 보안 공지", link: "https://www.boho.or.kr/kr/bbs/view.do?nttId=72263", published_at: "2026-11-17",
   });
+  const testMessage = discordNoticeMessage(env, {
+    title: "보안 공지", link: "https://www.boho.or.kr/kr/bbs/view.do?nttId=72263", published_at: "",
+  }, true);
+  expect(testMessage.embeds[0].title).toBe("[연동 테스트] 보안 공지");
   expect(message.allowed_mentions).toEqual({ parse: [] });
   expect(message.components[0].components.map((button) => button.label)).toEqual(["공지 열기", "국문 공지", "영문 공지"]);
 });
