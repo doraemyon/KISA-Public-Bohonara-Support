@@ -2,8 +2,8 @@ import { sha256 } from "./access";
 import { parseApplicantName } from "./applications";
 import { maxApplicationsPerHour, maxPendingApplications, NOTICE_ICON_PATH, publicSiteUrl } from "./config";
 import {
-  DISCORD_AUTH_PATH, DISCORD_NAME_PATH, DISCORD_ORIGIN, discordApi, discordId, discordSignupConfig, isDiscordWebhook, openWebhook,
-  removeWebhook, sealWebhook, toHex,
+  DISCORD_AUTH_PATH, DISCORD_NAME_PATH, DISCORD_ORIGIN, DISCORD_RESUME_PATH, discordApi, discordId, discordSignupConfig,
+  isDiscordWebhook, openDiscordCallbackCode, openWebhook, removeWebhook, sealDiscordCallbackCode, sealWebhook, toHex,
 } from "./discord-connection";
 import { renderSignupPlatformIcon } from "./signup-qr";
 import { renderSiteHeader, SITE_SHELL_STYLESHEET } from "./site-header";
@@ -15,6 +15,7 @@ const STATE_TTL_SECONDS = 600;
 interface SignupPageOptions {
   clearCookie?: boolean;
   showForm?: boolean;
+  resumeConnection?: boolean;
   nameError?: string;
 }
 
@@ -22,13 +23,13 @@ function signupPage(
   title: string,
   detail: string,
   status: number,
-  { clearCookie = false, showForm = false, nameError = "" }: SignupPageOptions = {},
+  { clearCookie = false, showForm = false, resumeConnection = false, nameError = "" }: SignupPageOptions = {},
 ): Response {
   const headers = new Headers({
     "Content-Type": "text/html; charset=utf-8",
     "Cache-Control": "no-store",
     // Browsers send Origin: null on form POSTs from documents using no-referrer.
-    "Referrer-Policy": showForm ? "same-origin" : "no-referrer",
+    "Referrer-Policy": showForm || resumeConnection ? "same-origin" : "no-referrer",
     "Strict-Transport-Security": "max-age=31536000",
     "X-Robots-Tag": "noindex",
     "Content-Security-Policy": "default-src 'none'; style-src 'self'; img-src 'self'; " +
@@ -46,6 +47,10 @@ function signupPage(
           <p class="signup-help" id="name-help">성명은 승인 심사를 위해 관리자에게 Telegram으로 전달됩니다.</p>
         </div>
         <button type="submit">알림 구독 신청하기</button>
+      </form>` : "";
+
+  const resume = resumeConnection ? `<form class="signup-form" method="post" action="${DISCORD_RESUME_PATH}">
+        <button type="submit">연결 이어가기</button>
       </form>` : "";
 
   return new Response(`<!doctype html>
@@ -68,6 +73,7 @@ function signupPage(
       <h1 id="signup-title">${title}</h1>
       <p class="signup-detail">${detail}</p>
       ${form}
+      ${resume}
     </section>
   </main>
 </body>
@@ -111,7 +117,7 @@ async function activeNameSession(env: Env, hash: string): Promise<boolean> {
   return record?.found === 1;
 }
 
-async function rateLimited(request: Request, env: Env, stage: "start" | "name"): Promise<Response | null> {
+async function rateLimited(request: Request, env: Env, stage: "start" | "name" | "handoff" | "resume"): Promise<Response | null> {
   const ip = request.headers.get("CF-Connecting-IP") || "unknown";
   const { success } = await env.DISCORD_SIGNUP_LIMITER.limit({ key: stage + ":" + ip });
   if (success) return null;
@@ -132,8 +138,19 @@ export async function startDiscordSignup(request: Request, env: Env): Promise<Re
   if (limited) return limited;
 
   const cookie = signupCookie(request);
-  if (cookie && await activeNameSession(env, await sha256(cookie))) {
-    return signupRedirect(DISCORD_NAME_PATH);
+  if (cookie) {
+    const hash = await sha256(cookie);
+    if (await activeNameSession(env, hash)) return signupRedirect(DISCORD_NAME_PATH);
+    const handoff = await env.DB.prepare(
+      "SELECT 1 AS found FROM discord_signup_states " +
+      "WHERE state_hash = ?1 AND expires_at > ?2 AND sealed_callback_code IS NOT NULL",
+    ).bind(hash, new Date().toISOString()).first<{ found: number }>();
+    if (handoff) {
+      return signupPage(
+        "Discord 연결 이어가기", "Discord에서 허용한 채널 연결을 이 브라우저에서 이어가세요.",
+        200, { resumeConnection: true },
+      );
+    }
   }
 
   const state = toHex(crypto.getRandomValues(new Uint8Array(32)));
@@ -280,6 +297,40 @@ async function registerChannel(env: Env, config: SignupConfig, code: string, nam
   }
 }
 
+function handoffInstructions(): Response {
+  return signupPage(
+    "처음 연 브라우저에서 이어가기",
+    "처음 가입을 열었던 브라우저로 돌아가세요. 가입 페이지에서 ‘Discord에서 신청’을 다시 누른 뒤 ‘연결 이어가기’를 선택하세요. 처음 창을 닫았다면 기본 브라우저에서 다시 시작해 주세요.",
+    200,
+  );
+}
+
+export async function resumeDiscordSignup(request: Request, env: Env): Promise<Response> {
+  if (request.method === "GET") return handoffInstructions();
+  const config = discordSignupConfig(env);
+  const state = signupCookie(request);
+  if (!config || !state || request.headers.get("Origin") !== publicSiteUrl(env)?.origin) {
+    return signupPage("연결을 확인할 수 없음", "처음 가입을 시작한 브라우저에서 다시 열어 주세요.", 403);
+  }
+  const limited = await rateLimited(request, env, "resume");
+  if (limited) return limited;
+  const hash = await sha256(state);
+  const record = await env.DB.prepare(
+    "DELETE FROM discord_signup_states WHERE state_hash = ?1 AND expires_at > ?2 " +
+    "AND sealed_callback_code IS NOT NULL RETURNING applicant_name, sealed_callback_code",
+  ).bind(hash, new Date().toISOString()).first<{ applicant_name: string | null; sealed_callback_code: string }>();
+  if (!record) {
+    return signupPage("연결을 이어갈 수 없음", "연결이 만료되었을 수 있습니다. 가입 페이지에서 다시 시작해 주세요.", 400);
+  }
+  try {
+    const code = await openDiscordCallbackCode(record.sealed_callback_code, config.key, hash);
+    return await registerChannel(env, config, code, record.applicant_name);
+  } catch {
+    console.error("Deferred Discord OAuth signup could not be completed.");
+    return signupPage("채널 연결 실패", "가입 페이지에서 연결을 다시 시작해 주세요.", 502, { clearCookie: true });
+  }
+}
+
 export async function completeDiscordSignup(request: Request, env: Env): Promise<Response> {
   const config = discordSignupConfig(env);
   if (!config) return signupPage("Discord 연결 준비 중", "가입 페이지에서 연결 상태를 확인해 주세요.", 503);
@@ -287,15 +338,32 @@ export async function completeDiscordSignup(request: Request, env: Env): Promise
   const state = params.get("state") ?? "";
   const cookie = signupCookie(request);
   const issuer = params.get("iss");
-  if (!/^[a-f0-9]{64}$/.test(state) || cookie !== state || (issuer && issuer !== DISCORD_ORIGIN)) {
+  if (!/^[a-f0-9]{64}$/.test(state) || (issuer && issuer !== DISCORD_ORIGIN)) {
     return signupPage("신청을 확인할 수 없음", "가입 페이지에서 다시 신청해 주세요.", 403);
+  }
+  const code = params.get("code");
+  const authorized = code && code.length <= 512 && !params.has("error");
+  const hash = await sha256(state);
+  if (cookie !== state) {
+    if (!authorized) {
+      return signupPage("신청을 확인할 수 없음", "처음 가입을 시작한 브라우저에서 다시 신청해 주세요.", 403);
+    }
+    const limited = await rateLimited(request, env, "handoff");
+    if (limited) return limited;
+    // Hold the code without exchanging it. Only the original browser can consume it.
+    const sealed = await sealDiscordCallbackCode(code, config.key, hash);
+    const stored = await env.DB.prepare(
+      "UPDATE discord_signup_states SET sealed_callback_code = COALESCE(sealed_callback_code, ?2) " +
+      "WHERE state_hash = ?1 AND expires_at > ?3",
+    ).bind(hash, sealed, new Date().toISOString()).run();
+    if (stored.meta.changes === 1) return signupRedirect(DISCORD_RESUME_PATH);
+    return signupPage("신청 시간이 만료됨", "가입 페이지에서 다시 신청해 주세요.", 400);
   }
   const record = await env.DB.prepare(
     "DELETE FROM discord_signup_states WHERE state_hash = ?1 AND expires_at > ?2 RETURNING applicant_name",
-  ).bind(await sha256(state), new Date().toISOString()).first<{ applicant_name: string | null }>();
+  ).bind(hash, new Date().toISOString()).first<{ applicant_name: string | null }>();
   if (!record) return signupPage("신청 시간이 만료됨", "가입 페이지에서 다시 신청해 주세요.", 400, { clearCookie: true });
-  const code = params.get("code");
-  if (!code || code.length > 512 || params.has("error")) {
+  if (!authorized) {
     return signupPage("채널 연결 취소", "Discord에 알림을 받으려면 채널 선택을 완료해 주세요.", 400, { clearCookie: true });
   }
   try {

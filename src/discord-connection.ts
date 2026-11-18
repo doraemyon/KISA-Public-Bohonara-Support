@@ -2,6 +2,7 @@ import { publicSiteUrl } from "./config";
 import type { Env } from "./types";
 
 export const DISCORD_AUTH_PATH = "/discord/subscribe";
+export const DISCORD_RESUME_PATH = "/discord/subscribe/resume";
 export const DISCORD_NAME_PATH = "/discord/subscribe/name";
 export const DISCORD_CALLBACK_PATH = "/discord/callback";
 export const DISCORD_ORIGIN = "https://discord.com";
@@ -61,18 +62,37 @@ function fromHex(value: string): Uint8Array<ArrayBuffer> {
   return Uint8Array.from(value.match(/../g) ?? [], (byte) => Number.parseInt(byte, 16));
 }
 
-export async function sealWebhook(hook: DiscordWebhook, secret: string): Promise<string> {
+async function sealDiscordData(value: string, secret: string, context?: string): Promise<string> {
   const key = await crypto.subtle.importKey("raw", fromHex(secret), "AES-GCM", false, ["encrypt"]);
   const iv = crypto.getRandomValues(new Uint8Array(12));
-  const bytes = new TextEncoder().encode(JSON.stringify({ id: hook.id, token: hook.token, channel_id: hook.channel_id }));
-  return toHex(iv) + ":" + toHex(new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, bytes)));
+  const encoder = new TextEncoder();
+  const additionalData = context === undefined ? undefined : encoder.encode(context);
+  const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData }, key, encoder.encode(value));
+  return toHex(iv) + ":" + toHex(new Uint8Array(encrypted));
+}
+
+async function openDiscordData(value: string, secret: string, context?: string): Promise<string> {
+  const [iv, ciphertext] = value.split(":");
+  const key = await crypto.subtle.importKey("raw", fromHex(secret), "AES-GCM", false, ["decrypt"]);
+  const additionalData = context === undefined ? undefined : new TextEncoder().encode(context);
+  const bytes = await crypto.subtle.decrypt({ name: "AES-GCM", iv: fromHex(iv), additionalData }, key, fromHex(ciphertext));
+  return new TextDecoder().decode(bytes);
+}
+
+export function sealDiscordCallbackCode(code: string, secret: string, hash: string): Promise<string> {
+  return sealDiscordData(code, secret, "discord-oauth-callback:" + hash);
+}
+
+export function openDiscordCallbackCode(value: string, secret: string, hash: string): Promise<string> {
+  return openDiscordData(value, secret, "discord-oauth-callback:" + hash);
+}
+
+export function sealWebhook(hook: DiscordWebhook, secret: string): Promise<string> {
+  return sealDiscordData(JSON.stringify({ id: hook.id, token: hook.token, channel_id: hook.channel_id }), secret);
 }
 
 export async function openWebhook(value: string, secret: string): Promise<DiscordWebhook> {
-  const [iv, ciphertext] = value.split(":");
-  const key = await crypto.subtle.importKey("raw", fromHex(secret), "AES-GCM", false, ["decrypt"]);
-  const bytes = await crypto.subtle.decrypt({ name: "AES-GCM", iv: fromHex(iv) }, key, fromHex(ciphertext));
-  const decoded: unknown = JSON.parse(new TextDecoder().decode(bytes));
+  const decoded: unknown = JSON.parse(await openDiscordData(value, secret));
   if (!isDiscordWebhook(decoded)) throw new Error("Invalid stored Discord webhook");
   return decoded;
 }

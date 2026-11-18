@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { sha256 } from "../src/access";
-import { discordSignupConfig, openWebhook, sealWebhook } from "../src/discord-connection";
-import { completeDiscordSignup, startDiscordSignup, submitDiscordName } from "../src/discord-signup";
+import { discordSignupConfig, openDiscordCallbackCode, openWebhook, sealWebhook } from "../src/discord-connection";
+import { completeDiscordSignup, resumeDiscordSignup, startDiscordSignup, submitDiscordName } from "../src/discord-signup";
 import { discordNoticeMessage, handleDiscordCallback, processDiscordNotices } from "../src/discord";
 import worker from "../src/index";
 import { renderOnboardingPage } from "../src/onboarding";
@@ -130,7 +130,9 @@ it.each([null, "김하늘"])("completes current and pre-deployment OAuth session
     ? Response.json({ webhook: hook, access_token: "short-lived-access" })
     : Response.json({ id: "123456789012345676", username: "other-name" }));
   vi.stubGlobal("fetch", network);
-  expect((await completeDiscordSignup(new Request(callbackUrl), live)).status).toBe(403);
+  const mismatchedIssuer = new URL(callbackUrl);
+  mismatchedIssuer.searchParams.set("iss", "https://other.example.test");
+  expect((await completeDiscordSignup(new Request(mismatchedIssuer), live)).status).toBe(403);
   expect(network).not.toHaveBeenCalled();
   const callback = await completeDiscordSignup(new Request(callbackUrl, { headers: { Cookie: cookie } }), live);
   expect((await completeDiscordSignup(new Request(callbackUrl, { headers: { Cookie: cookie } }), live)).status).toBe(400);
@@ -174,6 +176,78 @@ it.each([null, "김하늘"])("completes current and pre-deployment OAuth session
   expect(result.status).toBe(200);
   expect(result.headers.get("Set-Cookie")).toContain("Max-Age=0");
   expect(await result.text()).toContain("알림 신청 접수");
+});
+
+it("resumes a mobile callback only after confirmation in the browser that started it", async () => {
+  const state = "f".repeat(64);
+  const hash = await sha256(state);
+  const startCookie = "__Host-discord-signup=" + state;
+  const otherCookie = "__Host-discord-signup=" + "e".repeat(64);
+  const code = "one-time-mobile-code";
+  const resumeUrl = signupUrl + "/resume";
+  let stored: string | null = null;
+  const prepare = vi.fn((sql: string) => ({
+    bind: (...values: string[]) => ({
+      run: async () => {
+        if (sql.startsWith("UPDATE discord_signup_states")) {
+          if (values[0] !== hash) return { meta: { changes: 0 } };
+          stored ??= values[1];
+        }
+        return { meta: { changes: 1 } };
+      },
+      first: async () => {
+        if (values[0] !== hash || stored === null) return null;
+        if (sql.startsWith("SELECT 1 AS found FROM discord_signup_states")) return { found: 1 };
+        if (sql.startsWith("DELETE FROM discord_signup_states")) {
+          const result = { applicant_name: null, sealed_callback_code: stored };
+          stored = null;
+          return result;
+        }
+        return null;
+      },
+    }),
+  }));
+  const live = { ...env, DB: { prepare } as unknown as D1Database };
+  const network = vi.fn(async (url: string, _init: RequestInit) => url.endsWith("/oauth2/token")
+    ? Response.json({ webhook: hook, access_token: "short-lived-access" })
+    : Response.json({ id: "123456789012345676" }));
+  vi.stubGlobal("fetch", network);
+
+  const callback = origin + "/discord/callback?code=" + code + "&state=" + state;
+  const handoff = await completeDiscordSignup(new Request(callback, { headers: { Cookie: otherCookie } }), live);
+  expect(handoff.status).toBe(303);
+  expect(handoff.headers.get("Location")).toBe("/discord/subscribe/resume");
+  expect(handoff.headers.has("Set-Cookie")).toBe(false);
+  expect(stored).not.toContain(code);
+  expect(stored).not.toBeNull();
+  await expect(openDiscordCallbackCode(stored!, env.DISCORD_WEBHOOK_KEY!, hash)).resolves.toBe(code);
+  await expect(openDiscordCallbackCode(stored!, env.DISCORD_WEBHOOK_KEY!, await sha256(otherCookie))).rejects.toThrow();
+  expect(network).not.toHaveBeenCalled();
+
+  const instructions = await resumeDiscordSignup(new Request(resumeUrl), live);
+  expect(await instructions.text()).toContain("처음 연 브라우저에서 이어가기");
+  expect((await resumeDiscordSignup(new Request(resumeUrl, {
+    method: "POST", headers: { Origin: origin },
+  }), live)).status).toBe(403);
+  expect((await resumeDiscordSignup(new Request(resumeUrl, {
+    method: "POST", headers: { Origin: origin, Cookie: otherCookie },
+  }), live)).status).toBe(400);
+  expect((await resumeDiscordSignup(new Request(resumeUrl, {
+    method: "POST", headers: { Origin: "https://other.example.test", Cookie: startCookie },
+  }), live)).status).toBe(403);
+  expect(network).not.toHaveBeenCalled();
+
+  const ready = await startDiscordSignup(new Request(signupUrl, { headers: { Cookie: startCookie } }), live);
+  expect(ready.status).toBe(200);
+  expect(ready.headers.get("Referrer-Policy")).toBe("same-origin");
+  expect(await ready.text()).toContain("연결 이어가기");
+  const resume = () => new Request(resumeUrl, { method: "POST", headers: { Origin: origin, Cookie: startCookie } });
+  const completed = await resumeDiscordSignup(resume(), live);
+  expect(completed.status).toBe(303);
+  expect(completed.headers.get("Location")).toBe("/discord/subscribe/name");
+  expect((network.mock.calls[0][1].body as URLSearchParams).get("code")).toBe(code);
+  expect((await resumeDiscordSignup(resume(), live)).status).toBe(400);
+  expect(network).toHaveBeenCalledTimes(2);
 });
 
 it("retries expired OAuth connections until Discord removes the unused webhook", async () => {
