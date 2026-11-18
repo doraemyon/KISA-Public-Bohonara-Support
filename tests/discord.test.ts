@@ -82,6 +82,23 @@ it("rate-limits Discord submissions by Cloudflare IP before reading names or wri
   expect(prepare).not.toHaveBeenCalled();
 });
 
+it.each([
+  ["  ", "성명을 입력해 주세요."],
+  ["<script>", "성명은 문자로 2~48자 입력해 주세요."],
+])("shows a name-field error for invalid input (%j)", async (name, message) => {
+  const prepare = vi.fn();
+  const response = await startDiscordSignup(new Request(origin + "/discord/subscribe", {
+    method: "POST", headers: { Origin: origin }, body: new URLSearchParams({ name }),
+  }), { ...env, DB: { prepare } as unknown as D1Database });
+  const page = await response.text();
+  expect(response.status).toBe(400);
+  expect(response.headers.get("Referrer-Policy")).toBe("same-origin");
+  expect(page).toContain('aria-describedby="name-error name-help" aria-invalid="true"');
+  expect(page).toContain('id="name-error" role="alert">' + message + '</p>');
+  expect(page).not.toContain("<script>");
+  expect(prepare).not.toHaveBeenCalled();
+});
+
 it("redeems a same-browser state once and stores only an encrypted webhook for review", async () => {
   const insert = vi.fn(async () => ({ meta: { changes: 1 } }));
   const consume = vi.fn().mockResolvedValueOnce({ applicant_name: "김하늘" }).mockResolvedValue(null);

@@ -1,36 +1,86 @@
 import { sha256 } from "./access";
 import { parseApplicantName } from "./applications";
-import { maxApplicationsPerHour, maxPendingApplications, publicSiteUrl } from "./config";
+import { maxApplicationsPerHour, maxPendingApplications, NOTICE_ICON_PATH, publicSiteUrl } from "./config";
 import {
   DISCORD_AUTH_PATH, DISCORD_ORIGIN, discordApi, discordId, discordSignupConfig, isDiscordWebhook, openWebhook,
   removeWebhook, sealWebhook, toHex,
 } from "./discord-connection";
+import { renderSignupPlatformIcon } from "./signup-qr";
+import { renderSiteHeader, SITE_SHELL_STYLESHEET } from "./site-header";
 import type { Env } from "./types";
 
 const COOKIE_NAME = "__Host-discord-signup";
 const STATE_TTL_SECONDS = 600;
 
-function signupPage(title: string, detail: string, status: number, clearCookie = false, showForm = false): Response {
+interface SignupPageOptions {
+  clearCookie?: boolean;
+  showForm?: boolean;
+  nameError?: string;
+}
+
+function signupPage(
+  title: string,
+  detail: string,
+  status: number,
+  { clearCookie = false, showForm = false, nameError = "" }: SignupPageOptions = {},
+): Response {
   const headers = new Headers({
-    "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store",
+    "Content-Type": "text/html; charset=utf-8",
+    "Cache-Control": "no-store",
     // Browsers send Origin: null on form POSTs from documents using no-referrer.
     "Referrer-Policy": showForm ? "same-origin" : "no-referrer",
     "Strict-Transport-Security": "max-age=31536000",
     "X-Robots-Tag": "noindex",
-    "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; form-action 'self' https://discord.com; base-uri 'none'; frame-ancestors 'none'",
+    "Content-Security-Policy": "default-src 'none'; style-src 'self'; img-src 'self'; " +
+      (showForm ? "script-src 'self'; " : "") +
+      "form-action 'self' https://discord.com; base-uri 'none'; frame-ancestors 'none'",
   });
   if (clearCookie) headers.set("Set-Cookie", COOKIE_NAME + "=; Secure; HttpOnly; SameSite=Lax; Path=/; Max-Age=0");
-  const form = showForm ? '<form method="post" action="' + DISCORD_AUTH_PATH + '">' +
-    '<label for="name">성명</label><input id="name" name="name" maxlength="48" required autocomplete="name">' +
-    '<small>성명은 승인 심사를 위해 관리자에게 Telegram으로 전달됩니다.</small><button type="submit">Discord에서 채널 선택</button></form>' : "";
-  return new Response('<!doctype html><html lang="ko"><head><meta charset="utf-8">' +
-    '<meta name="viewport" content="width=device-width,initial-scale=1"><title>Discord 보안공지 신청</title>' +
-    '<style>body{margin:0;background:#0d1117;color:#f0f6fc;font:16px/1.6 system-ui,sans-serif}' +
-    'main{max-width:480px;margin:8vh auto;padding:24px}h1{font-size:26px}p,small{color:#aab4c1}a{color:#8dc2ff}' +
-    'form{margin:24px 0;display:grid;gap:10px}input,button{box-sizing:border-box;min-height:44px;border-radius:6px;padding:8px 12px;font:inherit}' +
-    'input{width:100%;background:#161b22;color:inherit;border:1px solid #4c5665}button{background:#454fbf;color:white;border:0;cursor:pointer}</style>' +
-    '</head><body><main><h1>' + title + '</h1><p>' + detail + '</p>' + form +
-    '<a href="/">가입 페이지로 돌아가기</a></main></body></html>', { status, headers });
+
+  const form = showForm ? `<form class="signup-form" method="post" action="${DISCORD_AUTH_PATH}">
+        <div class="signup-field">
+          <label for="name">성명</label>
+          <input id="name" name="name" maxlength="48" required autocomplete="name"
+            aria-describedby="name-error name-help"${nameError ? ' aria-invalid="true"' : ""}>
+          <p class="signup-error" id="name-error" role="alert">${nameError}</p>
+          <p class="signup-help" id="name-help">성명은 승인 심사를 위해 관리자에게 Telegram으로 전달됩니다.</p>
+        </div>
+        <button type="submit">Discord에서 채널 선택</button>
+      </form>` : "";
+
+  return new Response(`<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>${title} · 보안공지 알리미</title>
+  <link rel="icon" type="image/png" href="${NOTICE_ICON_PATH}">
+  ${SITE_SHELL_STYLESHEET}
+  <link rel="stylesheet" href="/assets/discord-signup.css">
+  ${showForm ? '<script src="/assets/discord-signup.js" defer></script>' : ""}
+</head>
+<body>
+  ${renderSiteHeader("보안공지 알리미", "/", { link: "archive" })}
+  <main class="public-content discord-signup">
+    <a class="signup-back" href="/"><span aria-hidden="true">←</span> 가입 페이지로 돌아가기</a>
+    <section class="signup-card" aria-labelledby="signup-title">
+      <div class="signup-mark">${renderSignupPlatformIcon("discord")}</div>
+      <h1 id="signup-title">${title}</h1>
+      <p class="signup-detail">${detail}</p>
+      ${form}
+    </section>
+  </main>
+</body>
+</html>`, { status, headers });
+}
+
+function signupFormPage(status: number, nameError = ""): Response {
+  return signupPage(
+    "Discord 알림 신청",
+    "성명을 입력한 뒤 Discord에서 알림을 받을 채널을 선택하세요.",
+    status,
+    { showForm: true, nameError },
+  );
 }
 
 type SignupConfig = NonNullable<ReturnType<typeof discordSignupConfig>>;
@@ -39,7 +89,7 @@ export async function startDiscordSignup(request: Request, env: Env): Promise<Re
   const config = discordSignupConfig(env);
   if (!config) return signupPage("Discord 연결 준비 중", "연결이 완료되면 이 페이지에서 알림을 신청할 수 있습니다.", 503);
   if (request.method === "GET") {
-    return signupPage("Discord 알림 신청", "본인의 성명을 입력하면 Discord에서 알림을 받을 채널을 선택할 수 있습니다.", 200, false, true);
+    return signupFormPage(200);
   }
   if (request.headers.get("Origin") !== publicSiteUrl(env)?.origin ||
       !request.headers.get("Content-Type")?.startsWith("application/x-www-form-urlencoded")) {
@@ -48,7 +98,7 @@ export async function startDiscordSignup(request: Request, env: Env): Promise<Re
   const clientKey = request.headers.get("CF-Connecting-IP") || "unknown";
   const { success } = await env.DISCORD_SIGNUP_LIMITER.limit({ key: clientKey });
   if (!success) {
-    const response = signupPage("신청을 잠시 쉬어 주세요", "짧은 시간에 신청을 여러 번 시도했습니다. 1분 뒤 다시 시도해 주세요.", 429, false, true);
+    const response = signupPage("신청을 잠시 쉬어 주세요", "짧은 시간에 신청을 여러 번 시도했습니다. 1분 뒤 다시 시도해 주세요.", 429, { showForm: true });
     response.headers.set("Retry-After", "60");
     return response;
   }
@@ -61,22 +111,25 @@ export async function startDiscordSignup(request: Request, env: Env): Promise<Re
       if (done) break;
       if (offset + value.byteLength > bytes.byteLength) {
         await reader.cancel();
-        return signupPage("입력이 너무 깁니다", "성명만 입력해 주세요.", 413, false, true);
+        return signupPage("입력이 너무 깁니다", "성명만 입력해 주세요.", 413, { showForm: true });
       }
       bytes.set(value, offset);
       offset += value.byteLength;
     }
   }
   const form = new URLSearchParams(new TextDecoder().decode(bytes.subarray(0, offset)));
-  const name = parseApplicantName((form.get("name") ?? "").trim().split(/\s+/));
-  if (!name) return signupPage("성명을 확인해 주세요", "본인의 성명을 입력해 주세요.", 400, false, true);
+  const submittedName = (form.get("name") ?? "").trim();
+  const name = parseApplicantName(submittedName.split(/\s+/));
+  if (!name) {
+    return signupFormPage(400, submittedName ? "성명은 문자로 2~48자 입력해 주세요." : "성명을 입력해 주세요.");
+  }
   const state = toHex(crypto.getRandomValues(new Uint8Array(32)));
   const now = Date.now();
   const stored = await env.DB.prepare(
     "INSERT INTO discord_signup_states (state_hash, expires_at, applicant_name) SELECT ?1, ?2, ?3 " +
     "WHERE (SELECT COUNT(*) FROM discord_signup_states WHERE expires_at > ?4) < 100",
   ).bind(await sha256(state), new Date(now + STATE_TTL_SECONDS * 1000).toISOString(), name, new Date(now).toISOString()).run();
-  if (stored.meta.changes !== 1) return signupPage("신청 대기 중", "잠시 후 다시 시도해 주세요.", 429, false, true);
+  if (stored.meta.changes !== 1) return signupPage("신청 대기 중", "잠시 후 다시 시도해 주세요.", 429, { showForm: true });
   const authorize = new URL("/oauth2/authorize", DISCORD_ORIGIN);
   authorize.search = new URLSearchParams({
     client_id: config.clientId, redirect_uri: config.redirect, response_type: "code",
@@ -145,8 +198,8 @@ async function registerChannel(env: Env, config: SignupConfig, code: string, nam
       saved = result.meta.changes === 1;
     }
     return saved
-      ? signupPage("알림 신청 접수", "관리자가 승인하면 선택한 Discord 채널에서 이후 등록되는 보안공지를 받습니다.", 200, true)
-      : signupPage("알림 신청을 추가할 수 없음", "이미 신청한 계정이나 채널인지 확인해 주세요. 신규 신청 한도에 도달한 경우 나중에 다시 시도할 수 있습니다.", 409, true);
+      ? signupPage("알림 신청 접수", "관리자가 승인하면 선택한 Discord 채널에서 이후 등록되는 보안공지를 받습니다.", 200, { clearCookie: true })
+      : signupPage("알림 신청을 추가할 수 없음", "이미 신청한 계정이나 채널인지 확인해 주세요. 신규 신청 한도에 도달한 경우 나중에 다시 시도할 수 있습니다.", 409, { clearCookie: true });
   } finally {
     if (!saved) await removeWebhook(hook);
   }
@@ -166,15 +219,15 @@ export async function completeDiscordSignup(request: Request, env: Env): Promise
   const record = await env.DB.prepare(
     "DELETE FROM discord_signup_states WHERE state_hash = ?1 AND expires_at > ?2 RETURNING applicant_name",
   ).bind(await sha256(state), new Date().toISOString()).first<{ applicant_name: string | null }>();
-  if (!record?.applicant_name) return signupPage("신청 시간이 만료됨", "가입 페이지에서 다시 신청해 주세요.", 400, true);
+  if (!record?.applicant_name) return signupPage("신청 시간이 만료됨", "가입 페이지에서 다시 신청해 주세요.", 400, { clearCookie: true });
   const code = params.get("code");
   if (!code || code.length > 512 || params.has("error")) {
-    return signupPage("채널 연결 취소", "Discord에 알림을 받으려면 채널 선택을 완료해 주세요.", 400, true);
+    return signupPage("채널 연결 취소", "Discord에 알림을 받으려면 채널 선택을 완료해 주세요.", 400, { clearCookie: true });
   }
   try {
     return await registerChannel(env, config, code, record.applicant_name);
   } catch {
     console.error("Discord OAuth signup could not be completed.");
-    return signupPage("채널 연결 실패", "Discord 채널 권한을 확인한 뒤 다시 신청해 주세요.", 502, true);
+    return signupPage("채널 연결 실패", "Discord 채널 권한을 확인한 뒤 다시 신청해 주세요.", 502, { clearCookie: true });
   }
 }
