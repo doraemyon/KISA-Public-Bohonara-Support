@@ -118,6 +118,10 @@ Remove-Item Env:TELEGRAM_BOT_TOKEN
 
 Discord는 채널 연결 권한을 확인합니다. 신청자가 선택한 채널의 공개 범위는 신청자 본인이 확인해야 합니다. 신청자가 입력한 성명은 관리자 승인에 사용하며, 신청을 처리하면 데이터베이스에서 삭제합니다. 공개 공지 목록과 국문·영문 문서는 누구나 열람할 수 있습니다.
 
+#### 반복 신청 제한
+
+Discord 웹 폼은 접속 IP별로, Telegram의 `/start`와 `/알림신청`은 계정별로 Cloudflare 위치당 분당 6회를 기준으로 제한합니다. Discord는 1분 후에 다시 시도하라는 안내를 표시하고, Telegram은 제한된 명령에 답장하지 않습니다. `MAX_APPLICATIONS_PER_HOUR`와 `MAX_PENDING_APPLICATIONS`는 플랫폼별로 각각 적용됩니다.
+
 ## 2. Cloudflare D1 만들기
 
 1. [Cloudflare Dashboard](https://dash.cloudflare.com/)에 무료 계정을 만듭니다.

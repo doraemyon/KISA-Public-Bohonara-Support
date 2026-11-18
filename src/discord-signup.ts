@@ -1,6 +1,6 @@
 import { sha256 } from "./access";
 import { parseApplicantName } from "./applications";
-import { maxPendingApplications, publicSiteUrl } from "./config";
+import { maxApplicationsPerHour, maxPendingApplications, publicSiteUrl } from "./config";
 import {
   DISCORD_AUTH_PATH, DISCORD_ORIGIN, discordApi, discordId, discordSignupConfig, isDiscordWebhook, openWebhook,
   removeWebhook, sealWebhook, toHex,
@@ -44,6 +44,13 @@ export async function startDiscordSignup(request: Request, env: Env): Promise<Re
   if (request.headers.get("Origin") !== publicSiteUrl(env)?.origin ||
       !request.headers.get("Content-Type")?.startsWith("application/x-www-form-urlencoded")) {
     return signupPage("신청을 시작할 수 없음", "가입 페이지에서 다시 신청해 주세요.", 403);
+  }
+  const clientKey = request.headers.get("CF-Connecting-IP") || "unknown";
+  const { success } = await env.DISCORD_SIGNUP_LIMITER.limit({ key: clientKey });
+  if (!success) {
+    const response = signupPage("신청을 잠시 쉬어 주세요", "짧은 시간에 신청을 여러 번 시도했습니다. 1분 뒤 다시 시도해 주세요.", 429, false, true);
+    response.headers.set("Retry-After", "60");
+    return response;
   }
   const reader = request.body?.getReader();
   const bytes = new Uint8Array(4096);
@@ -103,7 +110,10 @@ async function registerChannel(env: Env, config: SignupConfig, code: string, nam
     if (!current.ok) throw new Error("Discord identity lookup failed");
     const identity = await current.json<{ id?: string }>();
     if (!discordId(identity.id)) throw new Error("Invalid Discord user");
-    const now = new Date().toISOString();
+    const now = new Date();
+    const requestedAt = now.toISOString();
+    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000).toISOString();
+    const hourlyLimit = maxApplicationsPerHour(env);
     const sealed = await sealWebhook(hook, config.key);
     const legacy = await env.DB.prepare(
       "SELECT id, sealed_webhook FROM discord_webhook_subscriptions " +
@@ -113,8 +123,9 @@ async function registerChannel(env: Env, config: SignupConfig, code: string, nam
       const result = await env.DB.prepare(
         "UPDATE OR IGNORE discord_webhook_subscriptions " +
         "SET channel_id = ?2, sealed_webhook = ?3, applicant_name = ?4, name = NULL, requested_at = ?5, notify_after = ?5, notified_at = NULL " +
-        "WHERE id = ?1 AND approved_at IS NULL AND applicant_name IS NULL",
-      ).bind(legacy.id, hook.channel_id, sealed, name, now).run();
+        "WHERE id = ?1 AND approved_at IS NULL AND applicant_name IS NULL " +
+        "AND (SELECT COUNT(*) FROM discord_webhook_subscriptions WHERE requested_at >= ?6) < ?7",
+      ).bind(legacy.id, hook.channel_id, sealed, name, requestedAt, oneHourAgo, hourlyLimit).run();
       saved = result.meta.changes === 1;
       if (saved) {
         try {
@@ -128,8 +139,9 @@ async function registerChannel(env: Env, config: SignupConfig, code: string, nam
         "INSERT INTO discord_webhook_subscriptions (discord_user_id, channel_id, sealed_webhook, applicant_name, requested_at, notify_after) " +
         "SELECT ?1, ?2, ?3, ?4, ?5, ?5 " +
         "WHERE (SELECT COUNT(*) FROM discord_webhook_subscriptions WHERE approved_at IS NULL) < ?6 " +
+        "AND (SELECT COUNT(*) FROM discord_webhook_subscriptions WHERE requested_at >= ?7) < ?8 " +
         "ON CONFLICT DO NOTHING",
-      ).bind(identity.id, hook.channel_id, sealed, name, now, maxPendingApplications(env)).run();
+      ).bind(identity.id, hook.channel_id, sealed, name, requestedAt, maxPendingApplications(env), oneHourAgo, hourlyLimit).run();
       saved = result.meta.changes === 1;
     }
     return saved

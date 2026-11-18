@@ -21,6 +21,18 @@
     "MAX_APPLICATIONS_PER_HOUR": "__MAX_APPLICATIONS_PER_HOUR__",
     "ADMIN_NOTIFICATION_BATCH_SIZE": "__ADMIN_NOTIFICATION_BATCH_SIZE__"
   },
+  "ratelimits": [
+    {
+      "name": "DISCORD_SIGNUP_LIMITER",
+      "namespace_id": "2026111801",
+      "simple": { "limit": 6, "period": 60 }
+    },
+    {
+      "name": "TELEGRAM_SIGNUP_LIMITER",
+      "namespace_id": "2026111802",
+      "simple": { "limit": 6, "period": 60 }
+    }
+  ],
   "d1_databases": [
     {
       "binding": "DB",

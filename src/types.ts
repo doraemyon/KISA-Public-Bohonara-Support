@@ -1,5 +1,7 @@
 export interface Env {
   DB: D1Database;
+  DISCORD_SIGNUP_LIMITER: RateLimit;
+  TELEGRAM_SIGNUP_LIMITER: RateLimit;
   TELEGRAM_BOT_TOKEN: string;
   TELEGRAM_WEBHOOK_SECRET: string;
   DISCORD_CLIENT_ID?: string;

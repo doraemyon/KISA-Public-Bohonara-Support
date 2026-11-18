@@ -47,12 +47,16 @@ describe("application approval helpers", () => {
 });
 
 describe("Telegram application messages", () => {
-  it("queues a valid Korean command and silently discards invalid application messages", async () => {
+  it("queues valid commands and drops invalid or rate-limited signup attempts silently", async () => {
+    const limit = vi.fn(async () => ({ success: true }));
+    const prepare = vi.fn();
     const env = {
+      TELEGRAM_SIGNUP_LIMITER: { limit },
+      DB: { prepare } as unknown as D1Database,
       BOT_USERNAME: "KisaNoticeBot",
       TELEGRAM_WEBHOOK_SECRET: "test-webhook",
       ADMIN_TELEGRAM_USER_ID: "100",
-    } as Env;
+    } as Partial<Env> as Env;
     const submit = vi.spyOn(applications, "submitApplication").mockResolvedValue(true);
     const instructions = vi.spyOn(applications, "sendApplicationInstructions").mockResolvedValue();
     const send = (text: string) =>
@@ -85,6 +89,20 @@ describe("Telegram application messages", () => {
       expect(submit).toHaveBeenCalledTimes(2);
       expect(submit).toHaveBeenCalledWith(env, expect.any(Object), "이예원");
       expect(instructions).not.toHaveBeenCalled();
+      expect(limit).toHaveBeenCalledTimes(4);
+      expect(limit).toHaveBeenCalledWith({ key: "200" });
+
+      limit.mockClear();
+      limit.mockResolvedValue({ success: false });
+      for (const text of ["/알림신청 이예원", "/apply 이예원", "/start apply", "/start test-invite"]) {
+        const result = await send(text);
+        expect(result.status).toBe(200);
+        expect(await result.json()).toEqual({ ok: true });
+      }
+      expect(limit).toHaveBeenCalledTimes(4);
+      expect(submit).toHaveBeenCalledTimes(2);
+      expect(instructions).not.toHaveBeenCalled();
+      expect(prepare).not.toHaveBeenCalled();
     } finally {
       submit.mockRestore();
       instructions.mockRestore();

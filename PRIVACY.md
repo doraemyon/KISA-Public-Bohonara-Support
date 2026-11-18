@@ -19,6 +19,8 @@
 
 구독 데이터는 Cloudflare D1에 저장합니다. 공개 GitHub 저장소, GitHub Actions Artifact와 로그에는 저장하지 않습니다.
 
+가입 요청 횟수를 제한할 때 Cloudflare의 임시 카운터에서 Discord는 접속 IP, Telegram은 신청 계정의 ID를 사용합니다. Discord 접속 IP를 신청 데이터베이스에 추가로 저장하지 않습니다.
+
 ## 삭제
 
 구독자가 `/stop`을 실행하면 구독자 레코드, 신청 기록과 연결된 전송 기록이 삭제됩니다. 차단되거나 사용할 수 없는 Telegram 계정도 발송 과정에서 자동 삭제됩니다.

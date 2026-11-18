@@ -275,6 +275,13 @@ async function handleCommand(env: Env, message: TelegramMessage): Promise<void> 
 
   if (await handleAdminCommand(env, chatId, command.name, command.args)) return;
 
+  const applies = command.name === APPLICATION_COMMAND || command.name === "apply";
+  if (command.name === "start" || applies) {
+    if (message.from.is_bot || message.from.id !== message.chat.id) return;
+    const { success } = await env.TELEGRAM_SIGNUP_LIMITER.limit({ key: chatId });
+    if (!success) return;
+  }
+
   if (command.name === "start") {
     const code = command.args[0];
     if (!code || code.toLowerCase() === "apply") {
@@ -285,7 +292,7 @@ async function handleCommand(env: Env, message: TelegramMessage): Promise<void> 
     return;
   }
 
-  if (command.name === APPLICATION_COMMAND || command.name === "apply") {
+  if (applies) {
     const applicantName = parseApplicantName(command.args);
     if (applicantName) {
       await submitApplication(env, message, applicantName);

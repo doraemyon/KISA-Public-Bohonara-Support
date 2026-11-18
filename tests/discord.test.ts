@@ -10,10 +10,11 @@ const origin = "https://alerts.example.test";
 const env = {
   PUBLIC_BASE_URL: origin, BOT_USERNAME: "KisaNoticeBot",
   DISCORD_CLIENT_ID: "123456789012345671",
+  DISCORD_SIGNUP_LIMITER: { limit: async () => ({ success: true }) },
   DISCORD_CLIENT_SECRET: "test-oauth-settings-secret",
   DISCORD_WEBHOOK_KEY: "ab".repeat(32),
   ADMIN_TELEGRAM_USER_ID: "100", TELEGRAM_BOT_TOKEN: "mock-telegram-token",
-} as Env;
+} as Partial<Env> as Env;
 const hook = { id: "123456789012345674", token: "test-separate-channel-webhook", channel_id: "123456789012345675" };
 
 afterEach(() => vi.unstubAllGlobals());
@@ -55,6 +56,29 @@ it.each([null, "null", "https://other.example.test"])("rejects the form POST fro
     body: new URLSearchParams({ name: "가상검증" }),
   }), live);
   expect(response.status).toBe(403);
+  expect(prepare).not.toHaveBeenCalled();
+});
+
+it("rate-limits Discord submissions by Cloudflare IP before reading names or writing OAuth state", async () => {
+  const prepare = vi.fn();
+  const limit = vi.fn(async () => ({ success: false }));
+  const live = {
+    ...env, DISCORD_SIGNUP_LIMITER: { limit },
+    DB: { prepare } as unknown as D1Database,
+  };
+  const url = origin + "/discord/subscribe";
+  expect((await startDiscordSignup(new Request(url), live)).status).toBe(200);
+  expect(limit).not.toHaveBeenCalled();
+  const post = new Request(url, {
+    method: "POST",
+    headers: { Origin: origin, "CF-Connecting-IP": "192.0.2.2" },
+    body: new URLSearchParams({ name: "가상검증" }),
+  });
+  const response = await startDiscordSignup(post, live);
+  expect(response.status).toBe(429);
+  expect(response.headers.get("Retry-After")).toBe("60");
+  expect(limit).toHaveBeenCalledWith({ key: "192.0.2.2" });
+  expect(post.bodyUsed).toBe(false);
   expect(prepare).not.toHaveBeenCalled();
 });
 
