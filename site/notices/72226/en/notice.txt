@@ -2,7 +2,7 @@ Title:
 Ahsay Product Security Update Advisory
 
 Summary:
-We are disseminating today's KISA announcement "Ahsay Product Security Update Advisory". We recommend that representatives at each affiliated company using an affected version update to the latest version.
+Today, we will spread the contents of the KISA notice "Ahsay Product Security Update Advisory", and we advise those in charge of the affected versions to upgrade to the newest version.
 
 Body:
 □ Overview

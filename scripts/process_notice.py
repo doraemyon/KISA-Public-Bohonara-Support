@@ -425,8 +425,8 @@ def is_update_advisory(title: str, body: str) -> bool:
 def korean_summary(title: str, body: str) -> str:
     if is_update_advisory(title, body):
         return (
-            f"금일 KISA 공지 “{title}” 전파드리오니, 영향 버전을 가용 중인 각 관계사 "
-            "담당자분들께 최신 버전으로 업데이트 권고드립니다."
+            f"금일 KISA 공지 “{title}” 전파드리오니, 영향 버전을 사용 중인 "
+            "담당자께서는 최신 버전으로 업데이트 하시기를 권고드립니다."
         )
     return f'금일 KISA 공지 "{title}" 전파드리오니, 특이사항 있으시면 회신 바랍니다.'
 
@@ -449,8 +449,8 @@ def english_summary(korean_title: str, english_title: str, body: str) -> str:
     prefix = f'We are disseminating today\'s KISA announcement "{english_title}".'
     if is_update_advisory(korean_title, body):
         return (
-            f"{prefix} We recommend that representatives at each affiliated company using "
-            "an affected version update to the latest version."
+            f'Today, we will spread the contents of the KISA notice "{english_title}", '
+            "and we advise those in charge of the affected versions to upgrade to the newest version."
         )
     return f"{prefix} Please reply if you have any specific issues."
 

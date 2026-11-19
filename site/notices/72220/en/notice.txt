@@ -2,7 +2,7 @@ Title:
 Security Update Advisory for Cyber Imagination Products
 
 Summary:
-We are disseminating today's KISA announcement "Security Update Advisory for Cyber Imagination Products". We recommend that representatives at each affiliated company using an affected version update to the latest version.
+Today, we will spread the contents of the KISA notice "Security Update Advisory for Cyber Imagination Products", and we advise those in charge of the affected versions to upgrade to the newest version.
 
 Body:
 □ Overview
