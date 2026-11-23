@@ -4,6 +4,10 @@ KISA 보호나라에 새 보안공지가 올라오면 Telegram 또는 Discord로
 
 [알림 신청](https://notice.bohonara.workers.dev/) · [공지 목록](https://notice.bohonara.workers.dev/notices/)
 
+![보호나라 RSS의 새 공지 감지부터 Telegram·Discord 알림과 국문·영문 문서 생성·게시까지의 서비스 구성도](docs/images/service-overview.png)
+
+[구성도 편집 파일 · draw.io](docs/images/service-overview.drawio)
+
 ## 주요 기능
 
 - **Telegram**에서 봇의 개인 메시지로 새 공지 알림을 받습니다.
