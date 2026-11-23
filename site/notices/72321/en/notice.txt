@@ -1,0 +1,42 @@
+Title:
+Ascensio System Product Security Update Advisory
+
+Summary:
+Today, we will spread the contents of the KISA notice "Ascensio System Product Security Update Advisory", and we advise those in charge of the affected versions to upgrade to the newest version.
+
+Body:
+□ Overview
+o Ascensio System has released security updates addressing vulnerabilities in its ONLYOFFICE Docs (Document Server) product [1]
+o Users running affected versions are advised to update to the latest version according to the mitigation measures
+
+□ Description
+o External Control of File Name or Path vulnerability occurring in ONLYOFFICE Docs(CVE-2026-110385) [1][2]
+o OS Command Injection vulnerability occurring in ONLYOFFICE Docs(CVE-2026-113630) [1][3]
+o Authorization bypass and file read vulnerabilities occurring in ONLYOFFICE Docs(CVE-2026-113627) [1][4]
+o Path Traversal vulnerability occurring in ONLYOFFICE Docs(CVE-2026-97727) [1][5]
+o Missing Authorization vulnerability occurring in ONLYOFFICE Docs(CVE-2026-113631) [1][6]
+o Server-Side Request Forgery vulnerability occurring in ONLYOFFICE Docs(CVE-2026-110652) [1][7]
+
+□ Affected Products and Solutions
+Vulnerability / Product Name / Affected Version / Resolved Version
+CVE-2026-110385 / ONLYOFFICE Docs (Document Server) / Below 10.0.0 / 10.0.0
+CVE-2026-113630 / ONLYOFFICE Docs (Document Server) / 9.4.0-129 and above, and below 10.0.0 / 10.0.0
+CVE-2026-113627 / ONLYOFFICE Docs (Document Server) / Below 10.0.0 / 10.0.0
+CVE-2026-97727 / ONLYOFFICE Docs (Document Server) / Below 10.0.0 / 10.0.0
+CVE-2026-113631 / ONLYOFFICE Docs (Document Server) / 9.4.0-129 and above, and below 10.0.0 / 10.0.0
+CVE-2026-110652 / ONLYOFFICE Docs (Document Server) / 2.5.0 and above, and below 10.0.0 / 10.0.0
+※ Check the reference sites below and perform the update [1]
+
+□ Reference sites
+[1] https://helpcenter.onlyoffice.com/docs/changelog#security
+[2] https://nvd.nist.gov/vuln/detail/CVE-2026-110385
+[3] https://nvd.nist.gov/vuln/detail/CVE-2026-113630
+[4] https://nvd.nist.gov/vuln/detail/CVE-2026-113627
+[5] https://nvd.nist.gov/vuln/detail/CVE-2026-97727
+[6] https://nvd.nist.gov/vuln/detail/CVE-2026-113631
+[7] https://nvd.nist.gov/vuln/detail/CVE-2026-110652
+
+□ Questions and inquiries
+o Korea Internet & Security Agency (KISA) Cyber Civil Center: Dial 118 without area code
+
+□ Author: Vulnerability Management Center, Digital Threat Response Division
