@@ -1,0 +1,27 @@
+Title:
+BeyondTrust Product Security Update Advisory
+
+Summary:
+Today, we will spread the contents of the KISA notice "BeyondTrust Product Security Update Advisory", and we advise those in charge of the affected versions to upgrade to the newest version.
+
+Body:
+□ Overview
+o BeyondTrust releases security updates to address vulnerabilities in its products. [1]
+o Users running affected versions are advised to update to the latest version according to the workaround.
+
+□ Description
+o Authentication Bypass by Spoofing Vulnerability in BeyondTrust Remote Support (CVE-2026-102764) [1][2]
+
+□ Affected Products and Solutions
+Vulnerability / Product Name / Affected Version / Fixed Version
+CVE-2026-102764 / Remote Support / 26.2.3 or earlier / 26.3.1 or later
+※ Perform updates by referring to the sites listed below. [1]
+
+□ Reference sites
+[1] https://www.beyondtrust.com/trust-center/security-advisories/bt26-05
+[2] https://nvd.nist.gov/vuln/detail/CVE-2026-102764
+
+□ Questions and inquiries
+o Korea Internet & Security Agency Cyber Complaint Center: 118 (no area code)
+
+□ Prepared by: Vulnerability Management Center, Digital Threat Response Headquarters
