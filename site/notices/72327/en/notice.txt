@@ -1,0 +1,43 @@
+Title:
+HPE Product Security Update Advisory
+
+Summary:
+Today, we will spread the contents of the KISA notice "HPE Product Security Update Advisory", and we advise those in charge of the affected versions to upgrade to the newest version.
+
+Body:
+□ Overview
+o HPE has released security updates to address vulnerabilities in its products [1]
+o Users running affected versions are advised to update to the latest version according to the mitigation measures
+
+□ Description
+o Vulnerabilities occurring in HPE Integrated Lights-Out 5 (iLO 5) and Integrated Lights-Out 6 (iLO 6) (CVE-2026-65204) [1]
+o Vulnerabilities occurring in HPE Integrated Lights-Out 5 (iLO 5), Integrated Lights-Out 6 (iLO 6), and Integrated Lights-Out 7 (iLO 7) (CVE-2026-65205) [1]
+o Vulnerabilities occurring in HPE Integrated Lights-Out 5 (iLO 5), Integrated Lights-Out 6 (iLO 6), and Integrated Lights-Out 7 (iLO 7) (CVE-2026-65206) [1]
+o Vulnerabilities occurring in HPE Integrated Lights-Out 5 (iLO 5), Integrated Lights-Out 6 (iLO 6), and Integrated Lights-Out 7 (iLO 7) (CVE-2026-65207) [1]
+o Vulnerabilities occurring in HPE Integrated Lights-Out 5 (iLO 5), Integrated Lights-Out 6 (iLO 6), and Integrated Lights-Out 7 (iLO 7) (CVE-2026-65209) [1]
+
+□ Affected Products and Solutions
+Vulnerability / Product Name / Affected Version / Resolution Version
+CVE-2026-65204 / Integrated Lights-Out 5 (iLO 5) / Below 3.22 / 3.22 or higher
+CVE-2026-65204 / Integrated Lights-Out 6 (iLO 6) / Below 1.79 / 1.79 or higher
+CVE-2026-65205 / Integrated Lights-Out 5 (iLO 5) / Below 3.22 / 3.22 or higher
+CVE-2026-65205 / Integrated Lights-Out 6 (iLO 6) / Below 1.79 / 1.79 or higher
+CVE-2026-65205 / Integrated Lights-Out 7 (iLO 7) / Below 1.25.01 / 1.25.01 or higher
+CVE-2026-65206 / Integrated Lights-Out 5 (iLO 5) / Below 3.22 / 3.22 or higher
+CVE-2026-65206 / Integrated Lights-Out 6 (iLO 6) / Below 1.79 / 1.79 or higher
+CVE-2026-65206 / Integrated Lights-Out 7 (iLO 7) / Below 1.25.01 / 1.25.01 or higher
+CVE-2026-65207 / Integrated Lights-Out 5 (iLO 5) / Below 3.22 / 3.22 or higher
+CVE-2026-65207 / Integrated Lights-Out 6 (iLO 6) / Below 1.79 / 1.79 or higher
+CVE-2026-65207 / Integrated Lights-Out 7 (iLO 7) / Below 1.25.01 / 1.25.01 or higher
+CVE-2026-65209 / Integrated Lights-Out 5 (iLO 5) / Below 3.22 / 3.22 or higher
+CVE-2026-65209 / Integrated Lights-Out 6 (iLO 6) / Below 1.79 / 1.79 or higher
+CVE-2026-65209 / Integrated Lights-Out 7 (iLO 7) / Below 1.25.01 / 1.25.01 or higher
+※ Perform the update by checking the reference sites below [1]
+
+□ Reference sites
+[1] https://support.hpe.com/hpesc/public/docDisplay?docId=hpesbhf05170en_us&docLocale=en_US
+
+□ Questions and inquiries
+o Korea Internet & Security Agency (KISA) Cyber Civil Center: Dial 118 without an area code
+
+□ Author: Vulnerability Management Center, Digital Threat Response Division
